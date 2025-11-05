@@ -1,9 +1,9 @@
 {
   "version": 2,
-  "buildCommand": null,
+  "buildCommand": "npm run vercel-build",
   "outputDirectory": ".",
   "devCommand": null,
-  "installCommand": null,
+  "installCommand": "npm install",
   "framework": null,
   "rewrites": [
     {
