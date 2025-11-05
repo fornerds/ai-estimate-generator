@@ -1,0 +1,17 @@
+{
+  "name": "ai-estimate-generator",
+  "version": "1.0.0",
+  "description": "AI-powered estimate generator for Korean projects",
+  "scripts": {
+    "vercel-build": "node build-config.js"
+  },
+  "keywords": [
+    "ai",
+    "estimate",
+    "generator",
+    "korean"
+  ],
+  "author": "",
+  "license": "MIT"
+}
+
