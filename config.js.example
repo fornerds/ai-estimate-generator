@@ -1,0 +1,11 @@
+// API 키 설정 파일 (예시)
+// 실제 사용 시 config.js 파일을 생성하고 아래 형식으로 작성하세요
+const CONFIG = {
+    OPENAI_API_KEY: 'your-api-key-here'
+};
+
+// 전역에서 사용할 수 있도록 window 객체에 추가
+if (typeof window !== 'undefined') {
+    window.CONFIG = CONFIG;
+}
+

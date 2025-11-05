@@ -1,0 +1,920 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background-color: #fafbfc;
+    color: #2d3748;
+    line-height: 1.6;
+    margin: 0;
+    padding: 0;
+}
+
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+.page-header {
+    text-align: center;
+    margin-bottom: 40px;
+    padding: 20px 0;
+}
+
+.page-title {
+    font-size: 2.2rem;
+    font-weight: 700;
+    color: #1a202c;
+    margin: 0 0 8px 0;
+}
+
+.page-subtitle {
+    font-size: 1rem;
+    color: #718096;
+    margin: 0;
+}
+
+.main-layout {
+    display: grid;
+    grid-template-columns: 320px 1fr;
+    gap: 24px;
+    min-height: calc(100vh - 120px);
+}
+
+.sidebar {
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    border: 1px solid #e2e8f0;
+    overflow: hidden;
+}
+
+.sidebar-header {
+    padding: 20px;
+    border-bottom: 1px solid #e2e8f0;
+    background: #f8fafc;
+}
+
+.sidebar-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #2d3748;
+    margin: 0;
+}
+
+.sidebar-content {
+    padding: 20px;
+    max-height: calc(100vh - 200px);
+    overflow-y: auto;
+}
+
+.preview-area {
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    border: 1px solid #e2e8f0;
+    display: flex;
+    flex-direction: column;
+}
+
+.preview-header {
+    padding: 10px 20px;
+    border-bottom: 1px solid #e2e8f0;
+    background: #f8fafc;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.preview-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #2d3748;
+    margin: 0;
+}
+
+.preview-content {
+    flex: 1;
+    padding: 20px;
+    overflow-y: auto;
+    max-height: calc(100vh - 200px);
+    background: white;
+    border-radius: 6px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+/* 미리보기 영역 스크롤바 스타일링 */
+.preview-content::-webkit-scrollbar {
+    width: 8px;
+}
+
+.preview-content::-webkit-scrollbar-track {
+    background: #f8f9fa;
+    border-radius: 4px;
+}
+
+.preview-content::-webkit-scrollbar-thumb {
+    background: #dee2e6;
+    border-radius: 4px;
+}
+
+.preview-content::-webkit-scrollbar-thumb:hover {
+    background: #adb5bd;
+}
+
+/* Firefox 스크롤바 스타일링 */
+.preview-content {
+    scrollbar-width: thin;
+    scrollbar-color: #dee2e6 #f8f9fa;
+}
+
+/* PDF 다운로드 시 테두리 제거 */
+.preview-area.no-shadow {
+    box-shadow: none !important;
+    outline: none !important;
+    border: none !important;
+    background: white !important;
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
+.preview-area.no-shadow .estimate-container {
+    box-shadow: none !important;
+    outline: none !important;
+    border: none !important;
+    margin: 0 !important;
+    padding: 20px !important;
+    background: white !important;
+}
+
+.preview-area.no-shadow * {
+    box-shadow: none !important;
+    outline: none !important;
+}
+
+/* 견적서 내용의 중요한 선들은 유지 */
+.preview-area.no-shadow .estimate-container * {
+    box-shadow: none !important;
+    outline: none !important;
+}
+
+/* 테이블과 구분선은 명시적으로 스타일 복원 */
+.preview-area.no-shadow .estimate-table {
+    border-collapse: collapse !important;
+}
+
+.preview-area.no-shadow .estimate-table th {
+    border-bottom: 2px solid #000 !important;
+}
+
+.preview-area.no-shadow .estimate-table td {
+    border-bottom: 1px solid #eee !important;
+}
+
+.preview-area.no-shadow .estimate-timeline-table {
+    border-collapse: collapse !important;
+}
+
+.preview-area.no-shadow .estimate-timeline-table th,
+.preview-area.no-shadow .estimate-timeline-table td {
+    border: 1px solid #ddd !important;
+}
+
+.preview-area.no-shadow .estimate-divider-dotted {
+    border-top: 1px dotted #000 !important;
+}
+
+.preview-area.no-shadow .estimate-divider-solid {
+    border-top: 1px solid #000 !important;
+}
+
+.preview-area.no-shadow .estimate-header {
+    border-bottom: 2px solid #000 !important;
+}
+
+.preview-area.no-shadow .estimate-notes {
+    border-top: 1px solid #000 !important;
+}
+
+.preview-area.no-shadow .estimate-footer {
+    border-top: 1px solid #000 !important;
+}
+
+/* PDF 생성 시 전체 페이지 스타일 제거 */
+body.pdf-mode {
+    margin: 0 !important;
+    padding: 0 !important;
+    background: white !important;
+}
+
+body.pdf-mode * {
+    box-shadow: none !important;
+    outline: none !important;
+}
+
+/* 견적서 내용의 중요한 선들은 명시적으로 복원 */
+body.pdf-mode .estimate-table {
+    border-collapse: collapse !important;
+}
+
+body.pdf-mode .estimate-table th {
+    border-bottom: 2px solid #000 !important;
+}
+
+body.pdf-mode .estimate-table td {
+    border-bottom: 1px solid #eee !important;
+}
+
+body.pdf-mode .estimate-timeline-table {
+    border-collapse: collapse !important;
+}
+
+body.pdf-mode .estimate-timeline-table th,
+body.pdf-mode .estimate-timeline-table td {
+    border: 1px solid #ddd !important;
+}
+
+body.pdf-mode .estimate-package-section {
+    border: 1px solid #ddd !important;
+}
+
+body.pdf-mode .estimate-divider-dotted {
+    border-top: 1px dotted #000 !important;
+}
+
+body.pdf-mode .estimate-divider-solid {
+    border-top: 1px solid #000 !important;
+}
+
+body.pdf-mode .estimate-header {
+    border-bottom: 2px solid #000 !important;
+}
+
+body.pdf-mode .estimate-notes {
+    border-top: 1px solid #000 !important;
+}
+
+body.pdf-mode .estimate-footer {
+    border-top: 1px solid #000 !important;
+}
+
+.section-title {
+    font-size: 1.5em;
+    font-weight: bold;
+    margin-bottom: 20px;
+    color: #20B2AA;
+    border-bottom: 2px solid #20B2AA;
+    padding-bottom: 10px;
+}
+
+.form-group {
+    margin-bottom: 20px;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: bold;
+    color: #333;
+}
+
+.form-group input,
+.form-group textarea,
+.form-group select {
+    width: 100%;
+    padding: 14px 16px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    font-size: 14px;
+    transition: all 0.3s ease;
+    background: #fafafa;
+}
+
+.form-group input:focus,
+.form-group textarea:focus,
+.form-group select:focus {
+    outline: none;
+    border-color: #20B2AA;
+    background: white;
+    box-shadow: 0 0 0 3px rgba(32, 178, 170, 0.1);
+}
+
+.form-group textarea {
+    resize: vertical;
+    min-height: 120px;
+}
+
+.btn {
+    background: #20B2AA;
+    color: white;
+    border: none;
+    padding: 12px 24px;
+    border-radius: 8px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    margin: 5px;
+    box-shadow: 0 2px 8px rgba(32, 178, 170, 0.2);
+}
+
+.btn:hover {
+    background: #1a9b94;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(32, 178, 170, 0.3);
+}
+
+.btn:active {
+    transform: translateY(0);
+}
+
+.btn-secondary {
+    background: linear-gradient(135deg, #6c757d, #868e96);
+}
+
+.btn-danger {
+    background: linear-gradient(135deg, #dc3545, #e74c3c);
+}
+
+.loading {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(255, 255, 255, 0.9);
+    z-index: 9999;
+    text-align: center;
+    padding: 20px;
+    justify-content: center;
+    align-items: center;
+    flex-direction: column;
+}
+
+.loading.show {
+    display: flex;
+}
+
+.spinner {
+    border: 4px solid #f3f3f3;
+    border-top: 4px solid #20B2AA;
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    animation: spin 1s linear infinite;
+    margin: 0 auto 10px;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.error {
+    background: #f8d7da;
+    color: #721c24;
+    padding: 15px;
+    border-radius: 8px;
+    margin: 10px 0;
+    border: 1px solid #f5c6cb;
+}
+
+.success {
+    background: #d4edda;
+    color: #155724;
+    padding: 15px;
+    border-radius: 8px;
+    margin: 10px 0;
+    border: 1px solid #c3e6cb;
+}
+
+.code-editor {
+    background: #f8f9fa;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 15px;
+    margin-top: 20px;
+}
+
+.code-editor textarea {
+    width: 100%;
+    height: calc(100vh - 400px);
+    min-height: 500px;
+    border: none;
+    background: #1e1e1e;
+    color: #d4d4d4;
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+    font-size: 14px;
+    padding: 20px;
+    border-radius: 5px;
+    resize: vertical;
+    line-height: 1.5;
+    tab-size: 4;
+    white-space: pre;
+    overflow-x: auto;
+}
+
+.code-editor textarea:focus {
+    outline: none;
+    box-shadow: 0 0 0 2px #20B2AA;
+}
+
+/* Syntax highlighting for HTML in textarea */
+.code-editor textarea {
+    background: #1e1e1e;
+    color: #d4d4d4;
+}
+
+/* Add some basic syntax highlighting using CSS */
+.code-editor {
+    position: relative;
+}
+
+.code-editor::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(90deg, 
+        transparent 0%, 
+        rgba(255, 255, 255, 0.02) 25%, 
+        transparent 50%, 
+        rgba(255, 255, 255, 0.02) 75%, 
+        transparent 100%);
+    pointer-events: none;
+    z-index: 1;
+}
+
+.code-editor textarea {
+    position: relative;
+    z-index: 2;
+}
+
+/* preview-container 제거 - preview-content에 직접 적용 */
+
+/* preview-container 스크롤바 스타일 제거됨 - preview-content에서 처리 */
+
+.download-btn {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: linear-gradient(135deg, #20B2AA, #48CAE4);
+    color: white;
+    border: none;
+    padding: 12px 24px;
+    border-radius: 25px;
+    font-size: 14px;
+    font-weight: bold;
+    cursor: pointer;
+    box-shadow: 0 4px 15px rgba(32, 178, 170, 0.3);
+    transition: all 0.3s ease;
+    z-index: 1000;
+}
+
+.download-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(32, 178, 170, 0.4);
+}
+
+.download-btn:active {
+    transform: translateY(0);
+}
+
+.tab-nav {
+    display: flex;
+    background: #f7fafc;
+    border-radius: 6px;
+    padding: 4px;
+    margin-bottom: 20px;
+}
+
+.tab {
+    flex: 1;
+    padding: 8px 16px;
+    text-align: center;
+    cursor: pointer;
+    border-radius: 4px;
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: #718096;
+    transition: all 0.2s ease;
+    border: none;
+    background: transparent;
+    white-space: nowrap;
+    min-width: 0;
+}
+
+.tab.active {
+    background: white;
+    color: #20B2AA;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.tab:hover {
+    background: #e9ecef;
+}
+
+.tab.active:hover {
+    background: white;
+}
+
+.tab-content {
+    display: none;
+}
+
+.tab-content.active {
+    display: block;
+}
+
+@media (max-width: 768px) {
+    .main-layout {
+        grid-template-columns: 1fr;
+        gap: 16px;
+    }
+    
+    .sidebar {
+        order: 2;
+    }
+    
+    .preview-area {
+        order: 1;
+    }
+    
+    .preview-container {
+        min-height: 400px;
+    }
+    
+    .code-editor textarea {
+        height: 400px;
+        min-height: 400px;
+    }
+    
+    .page-title {
+        font-size: 1.8rem;
+    }
+    
+    .container {
+        padding: 16px;
+    }
+}
+
+/* 전체 선 두께 얇게 조정 */
+.estimate-container * {
+    border-width: 0.5px !important;
+}
+
+/* 예외: 굵은 선은 유지 */
+.estimate-container .estimate-header,
+.estimate-container .estimate-table th,
+.estimate-container .estimate-section-title {
+    border-width: 1px !important;
+}
+
+/* 견적서 스타일 (기존 견적서.html과 동일) */
+.estimate-container {
+    max-width: 750px;
+    margin: 0 auto;
+    background: white;
+    padding: 40px;
+    box-shadow: 0 0 20px rgba(0,0,0,0.1);
+    overflow-y: auto;
+    max-height: 100%;
+}
+
+.estimate-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    padding-bottom: 15px;
+    border-bottom: 2px solid #000;
+}
+
+.estimate-title-section {
+    display: flex;
+    align-items: center;
+}
+
+.estimate-title {
+    font-size: 28px;
+    font-weight: bold;
+    color: #000;
+    margin-right: 10px;
+}
+
+.estimate-subtitle {
+    font-size: 18px;
+    font-weight: normal;
+    color: #000;
+}
+
+.estimate-logo {
+    width: 50px;
+    height: 50px;
+    background-image: url('fornerds_logo.png');
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+}
+
+.estimate-date {
+    font-size: 15px;
+    margin: 15px 0;
+    color: #333;
+}
+
+.estimate-client-info {
+    font-size: 15px;
+    margin-bottom: 15px;
+    color: #333;
+}
+
+.estimate-divider-dotted {
+    border-top: 1px dotted #000;
+    margin: 15px 0;
+}
+
+.estimate-divider-solid {
+    border-top: 1px solid #000;
+    margin: 15px 0;
+}
+
+.estimate-client-info + .estimate-divider-solid {
+    border-top: 0.1px solid #b9b9b9 !important;
+}
+
+/* PDF 생성 시에도 적용되도록 */
+body.pdf-mode .estimate-client-info + .estimate-divider-solid {
+    border-top: 0.1px solid #b9b9b9 !important;
+}
+
+.preview-area.no-shadow .estimate-client-info + .estimate-divider-solid {
+    border-top: 0.1px solid #b9b9b9 !important;
+}
+
+.estimate-info-section {
+    margin: 20px 0;
+}
+
+/* 회사 정보 섹션 (사업자번호 포함) 간격 조정 */
+.company-info-section {
+    margin: 120px 0 20px 0;
+}
+
+.estimate-info-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin: 8px 0;
+    padding: 4px 0;
+}
+
+.estimate-info-label {
+    font-weight: bold;
+    color: #333;
+    flex: 0 0 auto;
+}
+
+.estimate-info-value {
+    text-align: right;
+    color: #000;
+    flex: 0 0 auto;
+}
+
+.estimate-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+}
+
+.estimate-table th {
+    background-color: #f8f9fa;
+    padding: 12px 10px;
+    text-align: left;
+    font-weight: bold;
+    border-bottom: 2px solid #000;
+    font-size: 13px;
+}
+
+.estimate-table th:last-child,
+.estimate-table td:last-child {
+    text-align: right;
+}
+
+.estimate-table td {
+    padding: 10px 10px;
+    border-bottom: 1px solid #eee;
+    font-size: 13px;
+}
+
+.estimate-table tr:nth-child(even) {
+    background-color: #f9f9f9;
+}
+
+.estimate-summary {
+    text-align: right;
+    margin: 15px 0;
+    font-size: 16px;
+}
+
+.estimate-summary-item {
+    display: flex;
+    justify-content: space-between;
+    margin: 4px 0;
+    padding: 3px 0;
+}
+
+.estimate-summary .estimate-summary-total {
+    font-weight: bold;
+    font-size: 18px;
+    border-top: 0.1px solid #b9b9b9;
+    padding-top: 10px;
+    margin-top: 15px;
+}
+
+.estimate-section-title {
+    font-size: 18px;
+    font-weight: bold;
+    margin: 25px 0 15px 0;
+    color: #000;
+}
+
+/* 패키지 옵션 섹션 제목 간격 조정 */
+.estimate-package-options-section .estimate-section-title {
+    margin: 160px 0 10px 0;
+}
+
+/* 개발 일정 섹션 제목 간격 조정 */
+.estimate-timeline-section .estimate-section-title {
+    margin: 130px 0 10px 0;
+}
+
+/* 개발 일정 섹션 전체 간격 조정 */
+.estimate-timeline-section {
+    margin: 0;
+}
+
+.estimate-timeline-section .estimate-timeline-table {
+    margin: 10px 0;
+}
+
+.estimate-package-section {
+    margin: 8px 0;
+    padding: 15px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    background-color: #f8f9fa;
+    page-break-inside: avoid;
+}
+
+.estimate-package-section:first-of-type {
+    margin-top: 10px;
+    page-break-before: auto;
+}
+
+.estimate-package-section:not(:first-of-type) {
+    page-break-before: avoid;
+}
+
+.estimate-package-title {
+    font-size: 16px;
+    font-weight: bold;
+    color: #20B2AA;
+    margin: 6px 0 0px 0;
+}
+
+.estimate-package-price {
+    font-size: 20px;
+    font-weight: bold;
+    color: #000;
+    margin: 4px 0 4px 0;
+}
+
+.estimate-package-features {
+    list-style: none;
+    padding-left: 0;
+}
+
+.estimate-package-features li {
+    margin: 6px 0;
+    padding-left: 18px;
+    position: relative;
+    font-size: 14px;
+}
+
+.estimate-package-features li:before {
+    content: "✓";
+    position: absolute;
+    left: 0;
+    color: #20B2AA;
+    font-weight: bold;
+}
+
+.estimate-timeline-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 15px 0;
+    font-size: 13px;
+}
+
+.estimate-timeline-table th,
+.estimate-timeline-table td {
+    padding: 10px;
+    text-align: left;
+    border: 1px solid #ddd;
+}
+
+.estimate-timeline-table th {
+    background-color: #f8f9fa;
+    font-weight: bold;
+    font-size: 12px;
+}
+
+.estimate-notes {
+    margin-top: 25px;
+    padding-top: 5px;
+    border-top: 1px solid #000;
+}
+
+.estimate-notes ul {
+    list-style: none;
+    padding-left: 0;
+}
+
+.estimate-notes li {
+    margin: 10px 0;
+    padding-left: 20px;
+    position: relative;
+    font-size: 13px;
+}
+
+.estimate-notes li:before {
+    content: "•";
+    position: absolute;
+    left: 0;
+    color: #000;
+    font-weight: bold;
+}
+
+.estimate-footer {
+    margin-top: 25px;
+    padding-top: 15px;
+    border-top: 1px solid #000;
+    text-align: right;
+    font-size: 12px;
+    color: #666;
+}
+
+/* CodeMirror Styles */
+.CodeMirror {
+    height: 600px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    font-family: 'Fira Code', 'Consolas', 'Monaco', monospace;
+    font-size: 14px;
+}
+
+.CodeMirror-focused .CodeMirror-cursor {
+    border-left: 1px solid #fff;
+}
+
+.CodeMirror-selected {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.CodeMirror-line {
+    color: #f8f8f2;
+}
+
+.CodeMirror-gutters {
+    background: #272822;
+    border-right: 1px solid #555;
+}
+
+.CodeMirror-linenumber {
+    color: #75715e;
+}
+
+.CodeMirror-foldgutter {
+    width: 12px;
+}
+
+.CodeMirror-foldgutter-open,
+.CodeMirror-foldgutter-folded {
+    cursor: pointer;
+}
+
+.CodeMirror-foldgutter-open:after {
+    content: '\25BE';
+}
+
+.CodeMirror-foldgutter-folded:after {
+    content: '\25B8';
+}

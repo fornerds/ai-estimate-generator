@@ -1,0 +1,47 @@
+# API 키 및 민감한 정보
+config.js
+.env
+.env.local
+.env.*.local
+
+# IDE 및 에디터 설정
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# 운영체제 파일
+Thumbs.db
+Desktop.ini
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# 로그 파일
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# 임시 파일
+*.tmp
+*.temp
+.cache/
+dist/
+build/
+
+# Node.js (만약 사용한다면)
+node_modules/
+package-lock.json
+yarn.lock
+
+# 생성된 견적서 파일 (선택사항)
+# *.html (견적서_*.html 파일만 제외하려면 주석 처리된 부분 사용)
+
+# 백업 파일
+*.bak
+*.backup
+*~
+

@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 견적서 생성기</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/theme/monokai.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/mode/xml/xml.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/mode/htmlmixed/htmlmixed.min.js"></script>
+    <script src="config.js"></script>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- PDF 다운로드 버튼 -->
+    <button class="download-btn" onclick="downloadPDF()">PDF 다운로드</button>
+    
+    <div class="container">
+        <!-- Page Header -->
+        <div class="page-header">
+            <h1 class="page-title">AI 견적서 생성기</h1>
+            <p class="page-subtitle">AI를 활용하여 전문적인 견적서를 자동으로 생성하세요</p>
+        </div>
+
+        <!-- Main Layout -->
+        <div class="main-layout">
+            <!-- Sidebar -->
+            <div class="sidebar">
+                <div class="sidebar-header">
+                    <h3 class="sidebar-title">프로젝트 정보</h3>
+                </div>
+                <div class="sidebar-content">
+                    <!-- Input Method Tabs -->
+                    <div class="tab-nav">
+                        <div class="tab active" onclick="switchInputTab('structured', this)">폼 입력</div>
+                        <div class="tab" onclick="switchInputTab('raw', this)">텍스트 입력</div>
+                    </div>
+
+                <!-- Structured Input Tab -->
+                <div id="structured-input" class="tab-content active">
+                    <form id="projectForm">
+                        <div class="form-group">
+                            <label for="projectName">프로젝트명</label>
+                            <input type="text" id="projectName" placeholder="예: 웹사이트 개발" required />
+                        </div>
+
+                        <div class="form-group">
+                            <label for="projectDescription">프로젝트 설명</label>
+                            <textarea id="projectDescription" placeholder="프로젝트에 대한 자세한 설명을 입력하세요..." required></textarea>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="clientName">클라이언트명</label>
+                            <input type="text" id="clientName" placeholder="예: ABC 회사" />
+                        </div>
+
+                        <div class="form-group">
+                            <label for="budget">예상 예산 (원)</label>
+                            <input type="number" id="budget" placeholder="10000000" min="0" />
+                        </div>
+
+                        <div class="form-group">
+                            <label for="timeline">개발 기간</label>
+                            <input type="text" id="timeline" placeholder="예: 3개월" />
+                        </div>
+
+                        <div class="form-group">
+                            <label for="additionalRequirements">추가 요구사항</label>
+                            <textarea id="additionalRequirements" placeholder="특별한 요구사항이나 기술 스택을 입력하세요..."></textarea>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="fileUpload">참고 파일 업로드 (선택사항)</label>
+                            <input type="file" id="fileUpload" accept=".txt,.pdf,.doc,.docx,.md" onchange="handleFileUpload(event)" />
+                            <small style="color: #666; font-size: 12px;">지원 형식: TXT, PDF, DOC, DOCX, MD</small>
+                            <div id="fileInfo" style="margin-top: 10px; padding: 10px; background: #f8f9fa; border-radius: 5px; display: none;">
+                                <div id="fileName"></div>
+                                <div id="fileSize"></div>
+                                <button type="button" class="btn btn-danger" onclick="removeFile()" style="margin-top: 5px; padding: 5px 10px; font-size: 12px;">파일 제거</button>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="aiPrompt">AI 프롬프트 (선택사항)</label>
+                            <textarea id="aiPrompt" placeholder="AI에게 전달할 추가 지시사항을 입력하세요..."></textarea>
+                        </div>
+
+                        <div style="text-align: center;">
+                            <button type="button" class="btn" onclick="generateEstimate()">AI 견적서 생성</button>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Raw Data Input Tab -->
+                <div id="raw-input" class="tab-content">
+                    <div class="form-group">
+                        <label for="rawData">전체 내용 입력</label>
+                        <textarea id="rawData" placeholder="예시:
+프로젝트: AI 기반 쇼핑몰 개발
+클라이언트: 스마트컴퍼니
+예산: 5천만원
+기간: 6개월
+요구사항:
+- React 기반 프론트엔드
+- Node.js 백엔드
+- AI 상품 추천 시스템
+- 결제 시스템 연동
+- 모바일 반응형
+- 관리자 대시보드
+
+추가 정보:
+고객은 전자상거래 경험이 풍부하며, AI를 활용한 개인화된 쇼핑 경험을 원합니다. 기존 시스템과의 연동도 필요합니다." style="height: 300px;"></textarea>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="rawFileUpload">참고 파일 업로드 (선택사항)</label>
+                        <input type="file" id="rawFileUpload" accept=".txt,.pdf,.doc,.docx,.md" onchange="handleRawFileUpload(event)" />
+                        <small style="color: #666; font-size: 12px;">지원 형식: TXT, PDF, DOC, DOCX, MD</small>
+                        <div id="rawFileInfo" style="margin-top: 10px; padding: 10px; background: #f8f9fa; border-radius: 5px; display: none;">
+                            <div id="rawFileName"></div>
+                            <div id="rawFileSize"></div>
+                            <button type="button" class="btn btn-danger" onclick="removeRawFile()" style="margin-top: 5px; padding: 5px 10px; font-size: 12px;">파일 제거</button>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="rawAiPrompt">AI 프롬프트 (선택사항)</label>
+                        <textarea id="rawAiPrompt" placeholder="AI에게 전달할 추가 지시사항을 입력하세요..."></textarea>
+                    </div>
+
+                    <div style="text-align: center;">
+                        <button type="button" class="btn" onclick="generateEstimateFromRaw()">AI 견적서 생성</button>
+                    </div>
+                </div>
+
+                <!-- Loading Indicator -->
+                <div class="loading" id="loading">
+                    <div class="spinner"></div>
+                    <p>AI가 견적서를 생성하고 있습니다...</p>
+                </div>
+
+                    <!-- Error/Success Messages -->
+                    <div id="messageContainer"></div>
+                </div>
+            </div>
+
+            <!-- Preview Area -->
+            <div class="preview-area">
+                <div class="preview-header">
+                    <h3 class="preview-title">견적서 미리보기</h3>
+                    <div class="tab-nav" style="width: auto; margin: 0; min-width: 200px;">
+                        <div class="tab active" onclick="switchTab('preview', this)">미리보기</div>
+                        <div class="tab" onclick="switchTab('code', this)">HTML 코드</div>
+                    </div>
+                </div>
+                <div class="preview-content">
+
+                <!-- Preview Tab -->
+                <div id="preview-tab" class="tab-content active">
+                    <div id="previewContainer">
+                        <!-- 기본 견적서 양식이 여기에 표시됩니다 -->
+                    </div>
+                </div>
+
+                <!-- Code Tab -->
+                <div id="code-tab" class="tab-content">
+                    <div class="code-editor">
+                        <h4>HTML 코드 편집</h4>
+                        <div style="margin-bottom: 10px; font-size: 12px; color: #666;">
+                            코드를 수정한 후 "저장하기" 버튼을 눌러 미리보기에 반영하세요
+                        </div>
+                        <textarea id="htmlCodeEditor" placeholder="생성된 HTML 코드가 여기에 표시됩니다..."></textarea>
+                        <div style="margin-top: 10px; display: flex; gap: 10px; justify-content: flex-end;">
+                            <button class="btn btn-secondary" onclick="resetCode()">원본 복원</button>
+                            <button class="btn btn-secondary" onclick="formatCode()">코드 정리</button>
+                            <button class="btn" onclick="updatePreview()">저장하기</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
