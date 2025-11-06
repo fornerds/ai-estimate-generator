@@ -348,8 +348,9 @@ async function extractProjectInfoFromRaw(apiKey, rawData, aiPrompt, uploadedFile
 2. 프로젝트 설명 (상세한 설명)
 3. 클라이언트명 (명시되지 않은 경우 "고객사"로 설정)
 4. 개발 기간 (예: 3개월, 6개월 등)
-5. 추가 요구사항
-6. 패키지별 예산 정보 (기본형, 표준형, 프리미엄형 패키지의 예산)
+5. 전체 예산 (중요: 만원 단위로 표시된 경우 숫자만 추출)
+6. 추가 요구사항
+7. 패키지별 예산 정보 (기본형, 표준형, 프리미엄형 패키지의 예산)
 
 중요 규칙:
 - 프로젝트명은 반드시 추출해야 하며, null이 될 수 없습니다
@@ -357,10 +358,20 @@ async function extractProjectInfoFromRaw(apiKey, rawData, aiPrompt, uploadedFile
 - 예: "카카오톡 자동 질문 분석 시스템", "AI 기반 고객 문의 관리 플랫폼" 등
 - 프로젝트명은 2-30자 정도의 간결하고 명확한 이름으로 생성하세요
 
+전체 예산 추출 규칙 (매우 중요):
+- "50만원" → "500000" (50 * 10000 = 500000원)
+- "100만원" → "1000000" (100 * 10000 = 1000000원)
+- "500만원" → "5000000" (500 * 10000 = 5000000원)
+- "50만원정도" → "500000"
+- "약 50만원" → "500000"
+- 만원 단위로 표시된 경우: 숫자 * 10000으로 변환하여 원 단위로 반환
+- 원 단위로 표시된 경우: 숫자만 추출 (예: "500000원" → "500000")
+- 예산이 명시되지 않으면 "null"로 설정
+
 패키지 예산 추출 규칙:
 - "기본형이 1000만원", "표준형 3000만원", "프리미엄형 5000만원" 등의 패턴을 찾아서 추출
 - 패키지명과 금액이 함께 언급된 경우만 추출
-- 만원 단위로 표시된 금액을 그대로 사용 (예: 3000만원 → 30000000)
+- 만원 단위로 표시된 금액을 원 단위로 변환 (예: 1000만원 → 10000000, 50만원 → 500000)
 - 패키지별 예산이 명시되지 않으면 null로 설정
 
 JSON 형식으로 응답해주세요:
@@ -368,7 +379,7 @@ JSON 형식으로 응답해주세요:
   "projectName": "프로젝트명 (반드시 제공, null 불가)",
   "projectDescription": "상세한 프로젝트 설명",
   "clientName": "클라이언트명",
-  "budget": "전체예산또는null",
+  "budget": "전체예산(원단위숫자만)또는null",
   "timeline": "개발기간",
   "additionalRequirements": "추가요구사항",
   "packageBudgets": {
@@ -387,7 +398,7 @@ ${uploadedFileContent ? '\n\n참고 파일 내용:\n' + uploadedFileContent : ''
 위 원시 데이터에서 견적서 작성에 필요한 정보를 추출해주세요.`;
 
     const response = await callOpenAIAPI(apiKey, systemPrompt, userPrompt);
-    const projectInfo = JSON.parse(response);
+    const projectInfo = safeJSONParse(response);
     
     // 프로젝트명이 null, undefined, 또는 문자열 "null"인 경우 처리
     if (!projectInfo.projectName || projectInfo.projectName === 'null' || projectInfo.projectName.trim() === '') {
@@ -452,16 +463,30 @@ async function generateEstimateWithPartialReplacement(apiKey, projectName, proje
         const budgetMatch = budget.match(/(\d+)/);
         if (budgetMatch) {
             subTotal = parseInt(budgetMatch[1]);
-            // 예산이 100만원 미만이면 만원 단위로 해석
-            if (subTotal < 1000000) {
+            
+            // 디버깅: 입력값 확인
+            console.log('Budget calculation for project info:');
+            console.log('Original budget:', budget);
+            console.log('Budget type:', typeof budget);
+            console.log('Budget includes 만원:', typeof budget === 'string' ? budget.includes('만원') : false);
+            console.log('Budget includes 천원:', typeof budget === 'string' ? budget.includes('천원') : false);
+            console.log('Extracted number:', subTotal);
+            
+            // 입력값이 문자열에 "만원"이 포함되어 있으면 만원 단위로 변환
+            if (typeof budget === 'string' && budget.includes('만원')) {
                 subTotal = subTotal * 10000; // 만원 단위로 변환
+                console.log('Converted to 만원 unit:', subTotal);
+            } else if (typeof budget === 'string' && budget.includes('천원')) {
+                subTotal = subTotal * 1000; // 천원 단위로 변환
+                console.log('Converted to 천원 unit:', subTotal);
+            } else {
+                console.log('Using as-is (원 unit):', subTotal);
             }
+            // 그 외의 경우는 입력값을 그대로 원 단위로 사용
             vat = Math.round(subTotal * 0.1); // VAT 계산 (10%)
             totalAmount = subTotal + vat; // VAT 포함 총 금액
             
-            console.log('Budget calculation for project info:');
-            console.log('Original budget:', budget);
-            console.log('Sub total (VAT 제외):', subTotal);
+            console.log('Final sub total (VAT 제외):', subTotal);
             console.log('VAT:', vat);
             console.log('Total amount (VAT 포함):', totalAmount);
         } else {
@@ -627,21 +652,28 @@ async function generateCostTableData(apiKey, projectName, projectDescription, bu
         const budgetMatch = budget.match(/(\d+)/);
         if (budgetMatch) {
             let totalAmount = parseInt(budgetMatch[1]);
-            if (totalAmount < 1000000) {
-                totalAmount = totalAmount * 10000; // 만원 단위로 변환
-            }
-            // budget이 이미 VAT 제외 금액인지 확인
-            if (budget.includes('만원') || budget.includes('원')) {
-                // 이미 원화 단위로 표시된 경우 VAT 제외 금액으로 간주
-                subTotal = totalAmount;
-            } else {
-                // 숫자만 있는 경우 VAT 제외 금액으로 간주
-                subTotal = totalAmount;
-            }
+            
+            // 디버깅: 입력값 확인
             console.log('Budget calculation for cost distribution:');
             console.log('Original budget:', budget);
-            console.log('Extracted amount:', totalAmount);
-            console.log('Sub total (VAT 제외):', subTotal);
+            console.log('Budget type:', typeof budget);
+            console.log('Budget includes 만원:', typeof budget === 'string' ? budget.includes('만원') : false);
+            console.log('Budget includes 천원:', typeof budget === 'string' ? budget.includes('천원') : false);
+            console.log('Extracted number:', totalAmount);
+            
+            // 입력값에 "만원"이 포함되어 있으면 만원 단위로 변환
+            if (typeof budget === 'string' && budget.includes('만원')) {
+                totalAmount = totalAmount * 10000; // 만원 단위로 변환
+                console.log('Converted to 만원 unit:', totalAmount);
+            } else if (typeof budget === 'string' && budget.includes('천원')) {
+                totalAmount = totalAmount * 1000; // 천원 단위로 변환
+                console.log('Converted to 천원 unit:', totalAmount);
+            } else {
+                console.log('Using as-is (원 unit):', totalAmount);
+            }
+            // 그 외의 경우는 입력값을 그대로 원 단위로 사용
+            subTotal = totalAmount;
+            console.log('Final sub total (VAT 제외):', subTotal);
         } else {
             // No budget provided - AI will generate appropriate amounts
             subTotal = 0;
@@ -703,7 +735,7 @@ ${uploadedFileContent ? '\n\n참고 파일 내용:\n' + uploadedFileContent : ''
 - "1,000,000원" ✅ (QA 최소 금액)`;
 
     const response = await callOpenAIAPI(apiKey, systemPrompt, userPrompt);
-    const costData = JSON.parse(response);
+    const costData = safeJSONParse(response);
     
     // Validate and adjust amounts to match subTotal
     const totalAmount = costData.items.reduce((sum, item) => {
@@ -734,9 +766,13 @@ async function generatePackageData(apiKey, projectName, projectDescription, clie
         const budgetMatch = budget.match(/(\d+)/);
         if (budgetMatch) {
             let budgetAmount = parseInt(budgetMatch[1]);
-            if (budgetAmount < 1000000) {
+            // 입력값에 "만원"이 포함되어 있으면 만원 단위로 변환
+            if (typeof budget === 'string' && budget.includes('만원')) {
                 budgetAmount = budgetAmount * 10000; // 만원 단위로 변환
+            } else if (typeof budget === 'string' && budget.includes('천원')) {
+                budgetAmount = budgetAmount * 1000; // 천원 단위로 변환
             }
+            // 그 외의 경우는 입력값을 그대로 원 단위로 사용
             subTotal = budgetAmount;
             totalAmount = subTotal + Math.round(subTotal * 0.1); // VAT 포함
         }
@@ -793,7 +829,7 @@ ${totalAmount > 0 ? `중요: 표준형 패키지의 가격은 반드시 Total Am
 
     // Generate package data using AI (including prices and features)
     const response = await callOpenAIAPI(apiKey, systemPrompt, userPrompt);
-    const packageData = JSON.parse(response);
+    const packageData = safeJSONParse(response);
     
     console.log('AI generated package data:', packageData);
     
@@ -834,7 +870,9 @@ ${uploadedFileContent ? '\n\n참고 파일 내용:\n' + uploadedFileContent : ''
 
 위 정보를 바탕으로 견적서에 적합한 프로젝트 개요를 자연스러운 문장 형식으로 작성해주세요.`;
 
-    const response = await callOpenAIAPI(apiKey, systemPrompt, userPrompt);
+    // 프로젝트 개요는 텍스트 형식이므로 JSON 형식 사용 안 함
+    const response = await callOpenAIAPI(apiKey, systemPrompt, userPrompt, false);
+    // JSON 형식이 아닌 경우 그대로 반환 (이미 텍스트)
     return response.trim();
 }
 
@@ -890,7 +928,7 @@ AI 앱 개발 일정 예시 (4-6개월):
     const userPrompt = `프로젝트명: ${projectName}
 프로젝트 설명: ${projectDescription}
 클라이언트명: ${clientName}
-개발 기간: ${timeline || '협의'}
+${timeline && timeline !== '협의' ? `\n**개발 기간 (중요): ${timeline}**\n이 기간을 반드시 준수하여 개발 일정을 설정해주세요. 예를 들어 "3일"이면 3일 내에, "3개월"이면 3개월 내에 프로젝트를 완료할 수 있도록 일정을 조정해주세요.` : '개발 기간: 협의 (프로젝트 설명을 분석하여 적절한 개발 기간을 설정해주세요.)'}
 추가 요구사항: ${additionalRequirements || '없음'}
 ${aiPrompt ? '\n추가 지시사항: ' + aiPrompt : ''}
 ${uploadedFileContent ? '\n\n참고 파일 내용:\n' + uploadedFileContent : ''}
@@ -898,12 +936,13 @@ ${uploadedFileContent ? '\n\n참고 파일 내용:\n' + uploadedFileContent : ''
 위 정보를 바탕으로 개발 일정의 7단계를 생성해주세요.
 
 중요: 
-1. 프로젝트 설명을 분석하여 적절한 개발 기간을 설정해주세요.
+1. ${timeline && timeline !== '협의' ? `**입력된 개발 기간(${timeline})을 반드시 준수하여** 전체 일정을 설정해주세요.` : '프로젝트 설명을 분석하여 적절한 개발 기간을 설정해주세요.'}
 2. 현재 날짜는 ${currentYear}년 ${currentMonth}월 ${currentDay}일입니다. 모든 일정은 이 날짜 이후로 시작해야 합니다.
-3. 첫 번째 단계는 현재 날짜 이후의 월요일부터 시작하도록 설정해주세요.`;
+3. 첫 번째 단계는 현재 날짜 이후의 월요일부터 시작하도록 설정해주세요.
+4. ${timeline && timeline !== '협의' ? `전체 개발 기간이 ${timeline}에 맞도록 각 단계의 기간을 조정해주세요.` : ''}`;
 
     const response = await callOpenAIAPI(apiKey, systemPrompt, userPrompt);
-    return JSON.parse(response);
+    return safeJSONParse(response);
 }
 
 // Replace cost table in HTML
@@ -912,10 +951,14 @@ function replaceCostTable(html, costTableData, subTotalFormatted, vatFormatted, 
     
     // Validate and fix negative amounts - 강화된 검증
     console.log('🔍 Starting cost table validation...');
+    
+    // 예산이 작을 경우 (7개 항목 * 50만원 = 350만원 미만) 최소 금액 체크 스킵
+    const minBudgetThreshold = 3500000; // 7개 항목 * 50만원
+    
     let actualTotal = 0;
     let qaItemIndex = -1;
     
-    // 1단계: 음수 금액 감지 및 QA 항목 찾기
+    // 1단계: 음수 금액 먼저 처리 및 QA 항목 찾기
     costTableData.items.forEach((item, index) => {
         console.log(`🔍 Processing item ${index + 1}:`, item);
         const amountStr = item.amount.replace(/[^\d-]/g, '');
@@ -927,12 +970,19 @@ function replaceCostTable(html, costTableData, subTotalFormatted, vatFormatted, 
             console.log(`🔍 QA item found at index ${index}`);
         }
         
-        if (amount >= 0) {
+        // 음수 금액을 즉시 0으로 설정
+        if (amount < 0) {
+            console.warn(`🚨 Negative amount detected for ${item.contents}: ${item.amount}. Setting to 0원`);
+            item.amount = '0원';
+        } else {
             actualTotal += amount;
         }
     });
     
     // 2단계: QA 항목 수정 (음수이거나 너무 낮은 경우)
+    // 예산이 작을 경우 (350만원 미만) QA 최소 금액도 조정
+    const minQAAmount = subTotal >= minBudgetThreshold ? 1000000 : Math.max(10000, Math.round(subTotal * 0.1)); // 최소 1만원
+    
     if (qaItemIndex >= 0) {
         const qaItem = costTableData.items[qaItemIndex];
         const qaAmountStr = qaItem.amount.replace(/[^\d-]/g, '');
@@ -943,7 +993,7 @@ function replaceCostTable(html, costTableData, subTotalFormatted, vatFormatted, 
             const remainingAmount = subTotal - actualTotal;
             const qaPercentage = 0.1; // QA는 전체의 10% 정도로 설정
             const suggestedQaAmount = Math.round(subTotal * qaPercentage);
-            const finalQaAmount = Math.max(suggestedQaAmount, 1000000); // 최소 1,000,000원
+            const finalQaAmount = Math.max(suggestedQaAmount, minQAAmount);
             
             // 나머지 금액을 다른 항목들에 비례적으로 분배
             const remainingForOthers = subTotal - finalQaAmount;
@@ -964,30 +1014,131 @@ function replaceCostTable(html, costTableData, subTotalFormatted, vatFormatted, 
             
             qaItem.amount = finalQaAmount.toLocaleString('ko-KR') + '원';
             actualTotal = subTotal;
-            console.warn(`🚨 Negative QA amount detected: ${qaItem.amount}. Redistributed amounts proportionally. QA set to ${finalQaAmount.toLocaleString('ko-KR')}원 (${qaPercentage * 100}% of total)`);
-        } else if (qaAmount < 1000000) {
-            // 너무 낮은 경우: 최소 금액으로 설정
-            qaItem.amount = '1,000,000원';
-            actualTotal += 1000000;
-            console.warn(`🚨 QA amount too low: ${qaItem.amount}. Set to minimum 1,000,000원`);
+            console.warn(`🚨 Negative QA amount detected. Redistributed amounts proportionally. QA set to ${finalQaAmount.toLocaleString('ko-KR')}원 (${qaPercentage * 100}% of total)`);
+        } else if (qaAmount < minQAAmount) {
+            // 너무 낮은 경우: 최소 금액으로 설정 (예산에 따라 조정)
+            qaItem.amount = minQAAmount.toLocaleString('ko-KR') + '원';
+            actualTotal += minQAAmount;
+            console.warn(`🚨 QA amount too low: ${qaAmount.toLocaleString('ko-KR')}원. Set to minimum ${minQAAmount.toLocaleString('ko-KR')}원`);
         } else {
             actualTotal += qaAmount;
         }
     }
     
-    // 3단계: 기타 항목 검증
-    costTableData.items.forEach((item, index) => {
-        if (item.type !== 'QA') {
+    // 3단계: 기타 항목 검증 및 예산에 맞게 조정
+    // 예산이 작을 경우 최소 금액 체크 스킵
+    const shouldUseMinAmount = subTotal >= minBudgetThreshold;
+    
+    if (!shouldUseMinAmount) {
+        // 예산이 작은 경우: 현재 합계를 예산에 맞게 비례 배분
+        // QA 항목은 별도 처리하므로 제외
+        const itemsForDistribution = costTableData.items.filter((item, index) => index !== qaItemIndex);
+        const positiveItems = itemsForDistribution.filter(item => {
             const amountStr = item.amount.replace(/[^\d-]/g, '');
-            const amount = parseInt(amountStr);
+            const amount = parseInt(amountStr) || 0;
+            return amount > 0;
+        });
+        
+        const currentTotal = positiveItems.reduce((sum, item) => {
+            const amountStr = item.amount.replace(/[^\d-]/g, '');
+            const amount = parseInt(amountStr) || 0;
+            return sum + amount;
+        }, 0);
+        
+        // QA 항목 금액 계산 (예산의 10% 또는 최소 금액)
+        const qaPercentage = 0.1;
+        const qaAmount = Math.max(minQAAmount, Math.round(subTotal * qaPercentage));
+        const remainingForOthers = subTotal - qaAmount;
+        
+        if (currentTotal > 0 && remainingForOthers > 0) {
+            const ratio = remainingForOthers / currentTotal;
             
-            if (amount < 500000) {
-                console.warn(`🚨 Amount too low for ${item.contents}: ${item.amount}. Setting to minimum 500,000원`);
-                item.amount = '500,000원';
-                actualTotal += 500000;
+            // 양수 항목들만 비례 배분 (QA 제외)
+            positiveItems.forEach((item) => {
+                const amountStr = item.amount.replace(/[^\d-]/g, '');
+                const amount = parseInt(amountStr) || 0;
+                const newAmount = Math.round(amount * ratio);
+                item.amount = newAmount.toLocaleString('ko-KR') + '원';
+            });
+            
+            // QA 항목 설정
+            if (qaItemIndex >= 0) {
+                costTableData.items[qaItemIndex].amount = qaAmount.toLocaleString('ko-KR') + '원';
             }
+            
+            actualTotal = subTotal;
+            console.log(`💰 예산이 작아서 비례 배분 적용: ${currentTotal.toLocaleString('ko-KR')}원 → ${remainingForOthers.toLocaleString('ko-KR')}원 (QA: ${qaAmount.toLocaleString('ko-KR')}원 별도)`);
+        } else if (currentTotal === 0 && qaItemIndex >= 0) {
+            // 모든 항목이 0이거나 음수인 경우: QA만 설정하고 나머지를 균등 분배
+            const itemsCount = itemsForDistribution.length;
+            const amountPerItem = Math.floor(remainingForOthers / itemsCount);
+            const remainder = remainingForOthers % itemsCount;
+            
+            itemsForDistribution.forEach((item, index) => {
+                const baseAmount = amountPerItem;
+                const finalAmount = index < remainder ? baseAmount + 1 : baseAmount;
+                item.amount = finalAmount.toLocaleString('ko-KR') + '원';
+            });
+            
+            costTableData.items[qaItemIndex].amount = qaAmount.toLocaleString('ko-KR') + '원';
+            actualTotal = subTotal;
+            console.log(`💰 모든 항목을 균등 분배: 항목당 ${amountPerItem.toLocaleString('ko-KR')}원, QA: ${qaAmount.toLocaleString('ko-KR')}원`);
         }
-    });
+    } else {
+        // 예산이 충분한 경우: 최소 금액 체크
+        costTableData.items.forEach((item, index) => {
+            if (item.type !== 'QA') {
+                const amountStr = item.amount.replace(/[^\d-]/g, '');
+                const amount = parseInt(amountStr);
+                
+                if (amount < 500000) {
+                    console.warn(`🚨 Amount too low for ${item.contents}: ${item.amount}. Setting to minimum 500,000원`);
+                    item.amount = '500,000원';
+                    actualTotal += 500000;
+                }
+            }
+        });
+    }
+    
+    // 최종 합계 재계산
+    actualTotal = costTableData.items.reduce((sum, item) => {
+        const amountStr = item.amount.replace(/[^\d-]/g, '');
+        const amount = parseInt(amountStr) || 0;
+        return sum + amount;
+    }, 0);
+    
+    // 합계가 맞지 않으면 가장 큰 금액 항목(또는 마지막 항목)으로 조정
+    if (actualTotal !== subTotal && costTableData.items.length > 0) {
+        const difference = subTotal - actualTotal;
+        
+        // QA 항목이 아니고 양수 금액을 가진 항목 중 가장 큰 금액 항목 찾기
+        let largestItem = null;
+        let largestAmount = 0;
+        let largestIndex = -1;
+        
+        costTableData.items.forEach((item, index) => {
+            if (index !== qaItemIndex) {
+                const amountStr = item.amount.replace(/[^\d-]/g, '');
+                const amount = parseInt(amountStr) || 0;
+                if (amount > largestAmount) {
+                    largestAmount = amount;
+                    largestItem = item;
+                    largestIndex = index;
+                }
+            }
+        });
+        
+        // 가장 큰 금액 항목이 없으면 마지막 항목 사용 (QA 제외)
+        const targetItem = largestItem || costTableData.items[costTableData.items.length - 1];
+        const targetIndex = largestIndex >= 0 ? largestIndex : costTableData.items.length - 1;
+        
+        const targetAmountStr = targetItem.amount.replace(/[^\d-]/g, '');
+        const targetAmount = parseInt(targetAmountStr) || 0;
+        const newTargetAmount = Math.max(0, targetAmount + difference);
+        targetItem.amount = newTargetAmount.toLocaleString('ko-KR') + '원';
+        actualTotal = subTotal;
+        console.log(`🔧 항목 조정으로 합계 맞춤: ${targetItem.contents} ${targetAmount.toLocaleString('ko-KR')}원 → ${newTargetAmount.toLocaleString('ko-KR')}원 (차이: ${difference > 0 ? '+' : ''}${difference.toLocaleString('ko-KR')}원)`);
+    }
     
     console.log('Cost table validation:');
     console.log('Expected subTotal:', subTotal);
@@ -1115,11 +1266,29 @@ function replaceTimeline(html, timelineData) {
                 const endMonth = parseInt(lastEndDate.split('/')[0]);
                 const endDay = parseInt(lastEndDate.split('/')[1]);
                 
+                // Determine correct year based on current date (same logic as above)
+                const today = new Date();
+                const baseYear = today.getFullYear();
+                
+                // Start date: use current year (or next year if month has passed)
+                let startYear = baseYear;
+                if (startMonth < today.getMonth() + 1 || 
+                    (startMonth === today.getMonth() + 1 && startDay < today.getDate())) {
+                    startYear = baseYear + 1;
+                }
+                
+                // End date: same year as start, or next year if end month < start month
+                let endYear = startYear;
+                if (endMonth < startMonth || (endMonth === startMonth && endDay < startDay)) {
+                    endYear = startYear + 1;
+                }
+                
                 // Calculate approximate weeks and months between start and end dates
-                const startDate = new Date(2025, startMonth - 1, startDay);
-                const endDate = new Date(2026, endMonth - 1, endDay);
+                const startDate = new Date(startYear, startMonth - 1, startDay);
+                const endDate = new Date(endYear, endMonth - 1, endDay);
                 const timeDiff = endDate.getTime() - startDate.getTime();
-                totalWeeks = Math.round(timeDiff / (1000 * 60 * 60 * 24 * 7));
+                const daysDiff = Math.round(timeDiff / (1000 * 60 * 60 * 24));
+                totalWeeks = Math.round(daysDiff / 7);
                 
                 // Calculate months more accurately
                 const yearDiff = endDate.getFullYear() - startDate.getFullYear();
@@ -1129,6 +1298,14 @@ function replaceTimeline(html, timelineData) {
                 totalMonths = yearDiff * 12 + monthDiff;
                 if (dayDiff < 0) {
                     totalMonths -= 1;
+                }
+                
+                // Ensure minimum values
+                if (totalWeeks === 0 && daysDiff > 0) {
+                    totalWeeks = 1;
+                }
+                if (totalMonths === 0 && totalWeeks > 0) {
+                    totalMonths = 1;
                 }
             }
         }
@@ -1155,30 +1332,91 @@ function replaceTimeline(html, timelineData) {
     return html;
 }
 
+// Extract JSON from response text (handles cases where API returns text with JSON embedded)
+function extractJSON(responseText) {
+    // Remove markdown code blocks
+    responseText = responseText.trim().replace(/^```json\s*/i, '').replace(/^```\s*/, '').replace(/\s*```$/, '');
+    
+    // Try to find JSON object (starts with { and ends with })
+    // Find the first opening brace
+    const firstBrace = responseText.indexOf('{');
+    if (firstBrace === -1) {
+        return responseText; // No JSON found
+    }
+    
+    // Find matching closing brace by counting braces
+    let braceCount = 0;
+    let jsonEnd = -1;
+    
+    for (let i = firstBrace; i < responseText.length; i++) {
+        if (responseText[i] === '{') {
+            braceCount++;
+        } else if (responseText[i] === '}') {
+            braceCount--;
+            if (braceCount === 0) {
+                jsonEnd = i;
+                break;
+            }
+        }
+    }
+    
+    if (jsonEnd !== -1) {
+        return responseText.substring(firstBrace, jsonEnd + 1);
+    }
+    
+    // If no matching brace found, try simple regex match
+    const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+        return jsonMatch[0];
+    }
+    
+    // If no JSON found, return original text
+    return responseText;
+}
+
+// Safe JSON parse with error handling
+function safeJSONParse(text) {
+    try {
+        const jsonText = extractJSON(text);
+        return JSON.parse(jsonText);
+    } catch (error) {
+        console.error('JSON 파싱 오류:', error);
+        console.error('원본 응답:', text);
+        throw new Error(`JSON 파싱 실패: ${error.message}. API 응답이 올바른 JSON 형식이 아닙니다.`);
+    }
+}
+
 // Common OpenAI API call function
-async function callOpenAIAPI(apiKey, systemPrompt, userPrompt) {
+async function callOpenAIAPI(apiKey, systemPrompt, userPrompt, useJSON = true) {
     // Call OpenAI API
+    const requestBody = {
+        model: 'gpt-4o-mini',
+        messages: [
+            {
+                role: 'system',
+                content: systemPrompt
+            },
+            {
+                role: 'user',
+                content: userPrompt
+            }
+        ],
+        temperature: 0.7,
+        max_tokens: 2000
+    };
+    
+    // JSON 형식이 필요한 경우에만 response_format 추가
+    if (useJSON) {
+        requestBody.response_format = { type: "json_object" };
+    }
+    
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${apiKey}`
         },
-        body: JSON.stringify({
-            model: 'gpt-4o-mini',
-            messages: [
-                {
-                    role: 'system',
-                    content: systemPrompt
-                },
-                {
-                    role: 'user',
-                    content: userPrompt
-                }
-            ],
-            temperature: 0.7,
-            max_tokens: 2000
-        })
+        body: JSON.stringify(requestBody)
     });
 
     if (!response.ok) {
