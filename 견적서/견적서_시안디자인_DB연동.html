@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>시안 디자인 및 DB 연동 프로젝트 견적서</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #ffffff;
+            color: #000000;
+            line-height: 1.6;
+            padding: 40px 20px;
+        }
+
+        .container {
+            max-width: 750px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.1);
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #000;
+        }
+
+        .title-section {
+            display: flex;
+            align-items: center;
+        }
+
+        .title {
+            font-size: 28px;
+            font-weight: bold;
+            color: #000;
+            margin-right: 10px;
+        }
+
+        .subtitle {
+            font-size: 16px;
+            font-weight: normal;
+            color: #000;
+        }
+
+        .logo {
+            width: 50px;
+            height: 50px;
+            background-image: url('fornerds_logo.png');
+            background-size: contain;
+            background-repeat: no-repeat;
+            background-position: center;
+        }
+
+        .date {
+            font-size: 15px;
+            margin: 18px 0;
+            color: #333;
+        }
+
+        .client-info {
+            font-size: 15px;
+            margin-bottom: 18px;
+            color: #333;
+        }
+
+        .divider-dotted {
+            border-top: 1px dotted #000;
+            margin: 15px 0;
+        }
+
+        .divider-solid {
+            border-top: 1px solid #000;
+            margin: 15px 0;
+        }
+
+        .info-section {
+            margin: 20px 0;
+        }
+
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin: 8px 0;
+            padding: 4px 0;
+        }
+
+        .info-label {
+            font-weight: bold;
+            color: #333;
+            flex: 0 0 auto;
+        }
+
+        .info-value {
+            text-align: right;
+            color: #000;
+            flex: 0 0 auto;
+        }
+
+        .table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+        }
+
+        .table th {
+            background-color: #f8f9fa;
+            padding: 12px 10px;
+            text-align: left;
+            font-weight: bold;
+            border-bottom: 2px solid #000;
+            font-size: 13px;
+        }
+
+        .table th:last-child,
+        .table td:last-child {
+            text-align: right;
+        }
+
+        .table td {
+            padding: 10px 10px;
+            border-bottom: 1px solid #eee;
+            font-size: 13px;
+        }
+
+        .table tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+
+        .summary {
+            text-align: right;
+            margin: 15px 0;
+            font-size: 16px;
+        }
+
+        .summary-item {
+            display: flex;
+            justify-content: space-between;
+            margin: 4px 0;
+            padding: 3px 0;
+        }
+
+        .summary-total {
+            font-weight: bold;
+            font-size: 18px;
+            border-top: 2px solid #000;
+            padding-top: 10px;
+            margin-top: 15px;
+        }
+
+        .section-title {
+            font-size: 18px;
+            font-weight: bold;
+            margin: 25px 0 15px 0;
+            color: #000;
+        }
+
+        .package-section {
+            margin: 15px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background-color: #f8f9fa;
+        }
+
+        .package-title {
+            font-size: 16px;
+            font-weight: bold;
+            color: #20B2AA;
+            margin: 6px 0 0px 0;
+        }
+
+        .package-price {
+            font-size: 20px;
+            font-weight: bold;
+            color: #000;
+            margin: 4px 0 4px 0;
+        }
+
+        .package-features {
+            list-style: none;
+            padding-left: 0;
+        }
+
+        .package-features li {
+            margin: 6px 0;
+            padding-left: 18px;
+            position: relative;
+            font-size: 14px;
+        }
+
+        .package-features li:before {
+            content: "✓";
+            position: absolute;
+            left: 0;
+            color: #20B2AA;
+            font-weight: bold;
+        }
+
+        .timeline-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0;
+            font-size: 13px;
+        }
+
+        .timeline-table th,
+        .timeline-table td {
+            padding: 10px;
+            text-align: left;
+            border: 1px solid #ddd;
+        }
+
+        .timeline-table th {
+            background-color: #f8f9fa;
+            font-weight: bold;
+            font-size: 12px;
+        }
+
+        .notes {
+            margin-top: 25px;
+            padding-top: 5px;
+            border-top: 1px solid #000;
+        }
+
+        .notes ul {
+            list-style: none;
+            padding-left: 0;
+        }
+
+        .notes li {
+            margin: 10px 0;
+            padding-left: 20px;
+            position: relative;
+            font-size: 13px;
+        }
+
+        .notes li:before {
+            content: "•";
+            position: absolute;
+            left: 0;
+            color: #000;
+            font-weight: bold;
+        }
+
+        .footer {
+            margin-top: 25px;
+            padding-top: 15px;
+            border-top: 1px solid #000;
+            text-align: right;
+            font-size: 12px;
+            color: #666;
+        }
+
+        .download-btn {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: linear-gradient(135deg, #20B2AA, #48CAE4);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 25px;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(32, 178, 170, 0.3);
+            transition: all 0.3s ease;
+            z-index: 1000;
+        }
+
+        .download-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(32, 178, 170, 0.4);
+        }
+
+        .download-btn:active {
+            transform: translateY(0);
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 20px;
+            }
+            
+            .header {
+                flex-direction: column;
+                text-align: center;
+            }
+            
+            .title {
+                font-size: 24px;
+            }
+            
+            .info-section {
+                grid-template-columns: 1fr;
+            }
+            
+            .info-value {
+                text-align: left;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- PDF 다운로드 버튼 -->
+    <button class="download-btn" onclick="downloadPDF()">PDF 다운로드</button>
+    
+    <div class="container" id="pdf-content">
+        <!-- Header -->
+        <div class="header">
+            <div class="title-section">
+                <span class="title">Estimate</span>
+                <span class="subtitle">견적서</span>
+            </div>
+            <div class="logo"></div>
+        </div>
+
+        <!-- Date and Client Info -->
+        <div class="date">2025년 10월 24일</div>
+        <div class="client-info">포너즈에서 아래와 같이 견적 드립니다.</div>
+        
+        <div class="divider-dotted"></div>
+
+        <!-- Project Info -->
+        <div class="info-section">
+            <div class="info-row">
+                <div class="info-label">프로젝트명</div>
+                <div class="info-value">시안 디자인 및 DB 연동 프로젝트</div>
+            </div>
+            
+            <div class="info-row">
+                <div class="info-label">금액</div>
+                <div class="info-value">일금 삼천만 원정(30,000,000원 / V.A.T 별도)</div>
+            </div>
+            
+            <div class="info-row">
+                <div class="info-label">일정</div>
+                <div class="info-value">2025년 10월 27일 ~ 11월 30일</div>
+            </div>
+        </div>
+
+        <div class="divider-solid"></div>
+
+        <!-- Project Overview -->
+        <div class="section-title">프로젝트 개요</div>
+        <p style="font-size: 15px; color: #333; margin: 15px 0;">3개의 디자인 시안 제작 및 선택된 시안의 데모 개발 프로젝트입니다. 82개 기술 데이터를 벡터/그래프 DB로 시각화하고 SPO 구조로 관계를 추출합니다.</p>
+
+        <!-- Development Cost Table -->
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Contents</th>
+                    <th>Type</th>
+                    <th>Amount</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>요구사항 분석 및 와이어프레임 설계</td>
+                    <td>Planning</td>
+                    <td>3,000,000원</td>
+                </tr>
+                <tr>
+                    <td>3개 디자인 시안 제작</td>
+                    <td>Frontend</td>
+                    <td>8,000,000원</td>
+                </tr>
+                <tr>
+                    <td>선택 시안 상세 디자인 및 프로토타입</td>
+                    <td>Frontend</td>
+                    <td>5,000,000원</td>
+                </tr>
+                <tr>
+                    <td>벡터/그래프 DB 구축 및 연동</td>
+                    <td>Backend</td>
+                    <td>4,000,000원</td>
+                </tr>
+                <tr>
+                    <td>SPO 관계 추출 및 시각화</td>
+                    <td>AI/ML</td>
+                    <td>3,500,000원</td>
+                </tr>
+                <tr>
+                    <td>한국어/영어 다국어 지원</td>
+                    <td>Integration</td>
+                    <td>2,000,000원</td>
+                </tr>
+                <tr>
+                    <td>시나리오 기반 데모 연동</td>
+                    <td>Feature</td>
+                    <td>4,500,000원</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <!-- Summary -->
+        <div class="summary">
+            <div class="summary-item">
+                <span>Sub Total</span>
+                <span>30,000,000원</span>
+            </div>
+            <div class="summary-item">
+                <span>V.A.T</span>
+                <span>3,000,000원</span>
+            </div>
+            <div class="summary-item summary-total">
+                <span>Total</span>
+                <span>33,000,000원</span>
+            </div>
+        </div>
+
+        <div class="divider-solid"></div>
+
+        <!-- Package Options -->
+        <div class="section-title" style="margin-top: 70px;">패키지 옵션</div>
+        
+        <div class="package-section">
+            <div class="package-title">기본형 패키지</div>
+            <div class="package-price">15,000,000원</div>
+            <ul class="package-features">
+                <li>3개의 디자인 시안 제작</li>
+                <li>와이어프레임 및 프로토타입</li>
+                <li>기본 인터랙션 디자인</li>
+                <li>시안 피드백 수집 및 개선</li>
+                <li>최종 시안 선정 지원</li>
+            </ul>
+        </div>
+
+        <div class="package-section">
+            <div class="package-title">표준형 패키지</div>
+            <div class="package-price">22,000,000원</div>
+            <ul class="package-features">
+                <li>기본형 모든 기능 포함</li>
+                <li>벡터/그래프 DB 구축 및 연동</li>
+                <li>SPO 관계 추출 및 시각화</li>
+                <li>한국어/영어 다국어 지원</li>
+                <li>시나리오 기반 데모 연동</li>
+                <li>기본 인터랙션 구현</li>
+                <li>데이터 시각화 및 그래프</li>
+            </ul>
+        </div>
+
+        <div class="package-section">
+            <div class="package-title">프리미엄형 패키지 (권장)</div>
+            <div class="package-price">30,000,000원</div>
+            <ul class="package-features">
+                <li>표준형 모든 기능 포함</li>
+                <li>고급 벡터/그래프 DB 최적화</li>
+                <li>AI 기반 SPO 관계 분석</li>
+                <li>실시간 데이터 처리 및 업데이트</li>
+                <li>고급 시각화 및 인터랙션</li>
+                <li>성능 최적화 및 확장성</li>
+                <li>전용 관리자 대시보드</li>
+                <li>API 연동 및 외부 시스템 연결</li>
+                <li>지속적인 성능 개선 지원 (3개월)</li>
+            </ul>
+        </div>
+
+        <!-- Development Timeline -->
+        <div class="section-title">개발 일정</div>
+        <table class="timeline-table">
+            <thead>
+                <tr>
+                    <th>단계</th>
+                    <th>주요 내용</th>
+                    <th>기간</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>1단계</td>
+                    <td>요구사항 분석 및 와이어프레임 설계</td>
+                    <td>10/27 ~ 10/30</td>
+                </tr>
+                <tr>
+                    <td>2단계</td>
+                    <td>3개 디자인 시안 제작</td>
+                    <td>10/28 ~ 10/31</td>
+                </tr>
+                <tr>
+                    <td>3단계</td>
+                    <td>클라이언트 시안 피드백</td>
+                    <td>11/1 ~ 11/6</td>
+                </tr>
+                <tr>
+                    <td>4단계</td>
+                    <td>시안 상세 디자인</td>
+                    <td>11/7 ~ 11/14</td>
+                </tr>
+                <tr>
+                    <td>5단계</td>
+                    <td>DB 연동 및 인터랙션 구현</td>
+                    <td>11/15 ~ 11/22</td>
+                </tr>
+                <tr>
+                    <td>6단계</td>
+                    <td>다국어 지원 및 시나리오 연동</td>
+                    <td>11/23 ~ 11/26</td>
+                </tr>
+                <tr>
+                    <td>7단계</td>
+                    <td>테스트 및 최종 최적화</td>
+                    <td>11/27 ~ 11/30</td>
+                </tr>
+                <tr style="background-color: #e8f4f8; font-weight: bold;">
+                    <td colspan="2">총 개발 기간</td>
+                    <td>약 5주</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <!-- Payment Terms -->
+        <div class="section-title">결제 조건</div>
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>단계</th>
+                    <th>지급율</th>
+                    <th>금액 (원)</th>
+                    <th>지급 시점</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>계약금</td>
+                    <td>50%</td>
+                    <td>15,000,000원</td>
+                    <td>계약 체결 시</td>
+                </tr>
+                <tr>
+                    <td>잔금</td>
+                    <td>50%</td>
+                    <td>15,000,000원</td>
+                    <td>최종 개발 완료 및 검수 후</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <!-- Maintenance -->
+        <div class="section-title">유지보수 및 지원</div>
+        <ul class="package-features">
+            <li>무상 유지보수: 개발 완료 후 3개월</li>
+            <li>긴급 지원: 24시간 이내 대응</li>
+            <li>시스템 모니터링: 서버 및 성능 모니터링, 장애 대응</li>
+            <li>디자인 개선: 피드백 반영 및 UI/UX 개선</li>
+        </ul>
+
+        <!-- Notes -->
+        <div class="notes">
+            <ul>
+                <li>본 견적서는 계약 체결일로부터 30일간 유효하며, 이후 가격 변동이 있을 수 있습니다.</li>
+                <li>개발 진행 중 요구사항 변경 시 추가 비용이 발생할 수 있으며, 변경 사항은 별도 협의를 통해 결정됩니다.</li>
+                <li>시스템 구축 완료 후 3개월간 무상 유지보수를 제공하며, 이후 유지보수 계약은 별도로 체결합니다.</li>
+                <li>디자인 시안의 경우 10월 31일까지 1차 시안을 제출하며, 최종 선택된 시안은 11월 말까지 데모 가능한 형태로 완성됩니다.</li>
+                <li>시스템 안정성 확보를 위해 개발 완료 후 2주간의 시범 운영 기간을 거쳐 최종 인수인계를 진행합니다.</li>
+            </ul>
+        </div>
+
+        <div class="divider-solid"></div>
+
+        <!-- Company Info -->
+        <div class="info-section">
+            <div class="info-row">
+                <div class="info-label">사업자번호</div>
+                <div class="info-value">748-87-03129</div>
+            </div>
+            
+            <div class="info-row">
+                <div class="info-label">상호</div>
+                <div class="info-value">포너즈 (Fornerds)</div>
+            </div>
+            
+            <div class="info-row">
+                <div class="info-label">대표자</div>
+                <div class="info-value">김경서</div>
+            </div>
+            
+            <div class="info-row">
+                <div class="info-label">주소</div>
+                <div class="info-value">서울특별시 강남구 역삼동 선릉로93길 40, 스파크플러스 5층</div>
+            </div>
+            
+            <div class="info-row">
+                <div class="info-label">전화번호</div>
+                <div class="info-value">(+82) 010-6685-4470</div>
+            </div>
+            
+            <div class="info-row">
+                <div class="info-label">E-mail</div>
+                <div class="info-value">fornerdsofficial@gmail.com</div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="footer">
+            <p><strong>작성자:</strong> 김경서 | AI 솔루션 아키텍트, 포너즈</p>
+            <p><strong>연락처:</strong> fornerdsofficial@gmail.com | (+82) 010-6685-4470</p>
+        </div>
+    </div>
+
+    <script>
+        function downloadPDF() {
+            const element = document.getElementById('pdf-content');
+            const opt = {
+                margin: [0.5, 0.3, 0.5, 0.3],
+                filename: '[포너즈] 시안디자인_DB연동_견적서.pdf',
+                image: { type: 'jpeg', quality: 1.0 },
+                html2canvas: { 
+                    scale: 2.0,
+                    useCORS: true,
+                    letterRendering: true,
+                    scrollX: 0,
+                    scrollY: 0,
+                    allowTaint: true,
+                    backgroundColor: '#ffffff',
+                    dpi: 300,
+                    logging: false
+                },
+                jsPDF: { 
+                    unit: 'in', 
+                    format: 'a4', 
+                    orientation: 'portrait',
+                    putOnlyUsedFonts: true,
+                    floatPrecision: 16,
+                    compress: false
+                }
+            };
+
+            // 다운로드 버튼 숨기기
+            const downloadBtn = document.querySelector('.download-btn');
+            downloadBtn.style.display = 'none';
+
+            html2pdf().set(opt).from(element).save().then(() => {
+                // PDF 생성 완료 후 버튼 다시 보이기
+                downloadBtn.style.display = 'block';
+            });
+        }
+    </script>
+</body>
+</html>

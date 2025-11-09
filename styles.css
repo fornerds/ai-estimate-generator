@@ -462,9 +462,6 @@ body.pdf-mode .estimate-footer {
 /* preview-container 스크롤바 스타일 제거됨 - preview-content에서 처리 */
 
 .download-btn {
-    position: fixed;
-    top: 20px;
-    right: 20px;
     background: linear-gradient(135deg, #20B2AA, #48CAE4);
     color: white;
     border: none;
@@ -475,7 +472,8 @@ body.pdf-mode .estimate-footer {
     cursor: pointer;
     box-shadow: 0 4px 15px rgba(32, 178, 170, 0.3);
     transition: all 0.3s ease;
-    z-index: 1000;
+    width: 100%;
+    min-width: 150px;
 }
 
 .download-btn:hover {
@@ -692,6 +690,7 @@ body.pdf-mode .estimate-client-info + .estimate-divider-solid {
     width: 100%;
     border-collapse: collapse;
     font-size: 14px;
+    table-layout: auto;
 }
 
 .estimate-table th {
@@ -712,6 +711,13 @@ body.pdf-mode .estimate-client-info + .estimate-divider-solid {
     padding: 10px 10px;
     border-bottom: 1px solid #eee;
     font-size: 13px;
+}
+
+/* 개발 범위 및 기간 테이블의 기간 열 너비 조정 */
+.estimate-table th:nth-child(3),
+.estimate-table td:nth-child(3) {
+    min-width: 130px;
+    white-space: nowrap;
 }
 
 .estimate-table tr:nth-child(even) {
@@ -756,12 +762,18 @@ body.pdf-mode .estimate-client-info + .estimate-divider-solid {
     margin: 130px 0 10px 0;
 }
 
+.estimate-timeline-section-detailed .estimate-section-title {
+    margin: 110px 0 10px 0;
+}
+
 /* 개발 일정 섹션 전체 간격 조정 */
-.estimate-timeline-section {
+.estimate-timeline-section,
+.estimate-timeline-section-detailed {
     margin: 0;
 }
 
-.estimate-timeline-section .estimate-timeline-table {
+.estimate-timeline-section .estimate-timeline-table,
+.estimate-timeline-section-detailed .estimate-timeline-table {
     margin: 10px 0;
 }
 

@@ -16,8 +16,13 @@
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-    <!-- PDF 다운로드 버튼 -->
-    <button class="download-btn" onclick="downloadPDF()">PDF 다운로드</button>
+    <!-- 다운로드 버튼 영역 -->
+    <div style="position: fixed; top: 20px; right: 20px; display: flex; flex-direction: column; gap: 10px; z-index: 1000;">
+        <button class="download-btn" onclick="downloadPDF()">PDF 다운로드</button>
+        <button class="download-btn" onclick="saveHTMLToFolder()">HTML 저장</button>
+        <button class="download-btn" onclick="document.getElementById('htmlFileInput').click()">HTML 불러오기</button>
+        <input type="file" id="htmlFileInput" accept=".html" style="display: none;" onchange="loadHTMLFile(event)">
+    </div>
     
     <div class="container">
         <!-- Page Header -->
@@ -43,6 +48,15 @@
                 <!-- Structured Input Tab -->
                 <div id="structured-input" class="tab-content active">
                     <form id="projectForm">
+                        <div class="form-group">
+                            <label for="templateSelect">견적서 양식</label>
+                            <select id="templateSelect" onchange="updateTemplatePreview()">
+                                <option value="견적서_템플릿.html">기본 견적서</option>
+                                <option value="상세견적서_템플릿.html">상세 견적서</option>
+                            </select>
+                            <small style="color: #666; font-size: 12px;">견적서 양식을 선택하세요</small>
+                        </div>
+
                         <div class="form-group">
                             <label for="projectName">프로젝트명</label>
                             <input type="text" id="projectName" placeholder="예: 웹사이트 개발" required />
@@ -97,6 +111,15 @@
 
                 <!-- Raw Data Input Tab -->
                 <div id="raw-input" class="tab-content">
+                    <div class="form-group">
+                        <label for="rawTemplateSelect">견적서 양식</label>
+                        <select id="rawTemplateSelect" onchange="updateTemplatePreview()">
+                            <option value="견적서_템플릿.html">기본 견적서</option>
+                            <option value="상세견적서_템플릿.html">상세 견적서</option>
+                        </select>
+                        <small style="color: #666; font-size: 12px;">견적서 양식을 선택하세요</small>
+                    </div>
+
                     <div class="form-group">
                         <label for="rawData">전체 내용 입력</label>
                         <textarea id="rawData" placeholder="예시:

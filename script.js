@@ -51,6 +51,51 @@ function switchInputTab(tabName, clickedElement) {
     }
 }
 
+// Get selected template
+function getSelectedTemplate() {
+    // Check structured input tab template select
+    const templateSelect = document.getElementById('templateSelect');
+    if (templateSelect && templateSelect.offsetParent !== null) {
+        return templateSelect.value;
+    }
+    
+    // Check raw input tab template select
+    const rawTemplateSelect = document.getElementById('rawTemplateSelect');
+    if (rawTemplateSelect && rawTemplateSelect.offsetParent !== null) {
+        return rawTemplateSelect.value;
+    }
+    
+    // Default template
+    return '견적서_템플릿.html';
+}
+
+// Update template preview
+async function updateTemplatePreview() {
+    const selectedTemplate = getSelectedTemplate();
+    try {
+        const response = await fetch(selectedTemplate);
+        const templateHtml = await response.text();
+        document.getElementById('previewContainer').innerHTML = templateHtml;
+        
+        // Update code editor if it exists
+        if (codeEditor) {
+            codeEditor.setValue(templateHtml);
+        } else {
+            document.getElementById('htmlCodeEditor').value = templateHtml;
+        }
+        
+        // Sync template selection between both tabs
+        const templateSelect = document.getElementById('templateSelect');
+        const rawTemplateSelect = document.getElementById('rawTemplateSelect');
+        if (templateSelect && rawTemplateSelect) {
+            templateSelect.value = selectedTemplate;
+            rawTemplateSelect.value = selectedTemplate;
+        }
+    } catch (error) {
+        console.error('템플릿 미리보기 로드 실패:', error);
+    }
+}
+
 // Show message
 function showMessage(message, type = 'error') {
     const container = document.getElementById('messageContainer');
@@ -210,10 +255,11 @@ async function generateEstimate() {
     document.getElementById('messageContainer').innerHTML = '';
 
     try {
-        // Load template
+        // Load selected template
         let templateHtml = '';
         try {
-            const response = await fetch('견적서_템플릿.html');
+            const selectedTemplate = getSelectedTemplate();
+            const response = await fetch(selectedTemplate);
             templateHtml = await response.text();
         } catch (error) {
             console.error('템플릿 로드 실패:', error);
@@ -230,7 +276,9 @@ async function generateEstimate() {
             additionalRequirements, 
             aiPrompt, 
             uploadedFileContent, 
-            templateHtml
+            templateHtml,
+            null,
+            selectedTemplate
         );
 
         // Store original code
@@ -278,10 +326,12 @@ async function generateEstimateFromRaw() {
     document.getElementById('messageContainer').innerHTML = '';
 
     try {
-        // Load template
+        // Load selected template
         let templateHtml = '';
+        let selectedTemplate = '';
         try {
-            const response = await fetch('견적서_템플릿.html');
+            selectedTemplate = getSelectedTemplate();
+            const response = await fetch(selectedTemplate);
             templateHtml = await response.text();
         } catch (error) {
             console.error('템플릿 로드 실패:', error);
@@ -312,7 +362,8 @@ async function generateEstimateFromRaw() {
             rawAiPrompt, 
             rawUploadedFileContent, 
             templateHtml,
-            projectInfo.packageBudgets
+            projectInfo.packageBudgets,
+            selectedTemplate
         );
 
         // Store original code
@@ -427,10 +478,27 @@ ${uploadedFileContent ? '\n\n참고 파일 내용:\n' + uploadedFileContent : ''
     return projectInfo;
 }
 
+// Detect template type
+function detectTemplateType(templateHtml, templateFileName = '') {
+    // 파일명으로 먼저 확인
+    if (templateFileName && (templateFileName.includes('상세설계') || templateFileName.includes('상세견적서'))) {
+        return 'detailed'; // 상세 견적서
+    }
+    // HTML 내용으로 확인
+    if (templateHtml.includes('상세설계') || templateHtml.includes('상세설계 견적서') || templateHtml.includes('상세 견적서')) {
+        return 'detailed'; // 상세 견적서
+    }
+    return 'standard'; // 기본 견적서
+}
+
 // Partial replacement functions for each section
-async function generateEstimateWithPartialReplacement(apiKey, projectName, projectDescription, clientName, budget, timeline, additionalRequirements, aiPrompt, uploadedFileContent, templateHtml, packageBudgets = null) {
+async function generateEstimateWithPartialReplacement(apiKey, projectName, projectDescription, clientName, budget, timeline, additionalRequirements, aiPrompt, uploadedFileContent, templateHtml, packageBudgets = null, templateFileName = '') {
     const today = new Date();
     const todayStr = `${today.getFullYear()}년 ${String(today.getMonth() + 1).padStart(2, '0')}월 ${String(today.getDate()).padStart(2, '0')}일`;
+    
+    // Detect template type
+    const templateType = detectTemplateType(templateHtml, templateFileName);
+    console.log('템플릿 타입:', templateType);
     
     // Calculate project dates
     const startDate = new Date(today);
@@ -511,26 +579,60 @@ async function generateEstimateWithPartialReplacement(apiKey, projectName, proje
         return amount.toLocaleString('ko-KR') + '원';
     };
     
-    // 먼저 costTableData를 생성하여 subTotal을 계산
+    // 템플릿 타입에 따라 다른 데이터 생성
     console.log('🚀 병렬 AI API 호출 시작...');
     const startTime = Date.now();
     
-    const [
-        costTableData,
-        overviewText,
-        timelineData
-    ] = await Promise.all([
-        generateCostTableData(apiKey, projectName, projectDescription, budget, additionalRequirements, aiPrompt, uploadedFileContent),
-        generateProjectOverview(apiKey, projectName, projectDescription, additionalRequirements, aiPrompt, uploadedFileContent),
-        generateTimelineData(apiKey, projectName, projectDescription, timeline, additionalRequirements, aiPrompt, uploadedFileContent, packageBudgets)
-    ]);
+    let costTableData, overviewText, timelineData, packageData, scopeAndPeriodData, detailedScheduleData;
+    
+    if (templateType === 'detailed') {
+        // 상세 견적서용 데이터 생성
+        [
+            costTableData,
+            overviewText,
+            timelineData,
+            scopeAndPeriodData,
+            detailedScheduleData
+        ] = await Promise.all([
+            generateCostTableDataForDetailed(apiKey, projectName, projectDescription, budget, additionalRequirements, aiPrompt, uploadedFileContent),
+            generateProjectOverview(apiKey, projectName, projectDescription, additionalRequirements, aiPrompt, uploadedFileContent, 'detailed'),
+            generateTimelineData(apiKey, projectName, projectDescription, timeline, additionalRequirements, aiPrompt, uploadedFileContent, packageBudgets),
+            generateScopeAndPeriodData(apiKey, projectName, projectDescription, timeline, additionalRequirements, aiPrompt, uploadedFileContent),
+            generateDetailedScheduleData(apiKey, projectName, projectDescription, timeline, additionalRequirements, aiPrompt, uploadedFileContent)
+        ]);
+    } else {
+        // 기본 견적서용 데이터 생성
+        [
+            costTableData,
+            overviewText,
+            timelineData,
+            packageData
+        ] = await Promise.all([
+            generateCostTableData(apiKey, projectName, projectDescription, budget, additionalRequirements, aiPrompt, uploadedFileContent),
+            generateProjectOverview(apiKey, projectName, projectDescription, additionalRequirements, aiPrompt, uploadedFileContent, 'standard'),
+            generateTimelineData(apiKey, projectName, projectDescription, timeline, additionalRequirements, aiPrompt, uploadedFileContent, packageBudgets),
+            generatePackageData(apiKey, projectName, projectDescription, clientName, budget, additionalRequirements, aiPrompt, uploadedFileContent, subTotal, totalAmount, packageBudgets)
+        ]);
+    }
     
     // If no budget provided, calculate from AI-generated amounts
     if (subTotal === 0) {
-        const calculatedSubTotal = costTableData.items.reduce((sum, item) => {
-            const amount = parseInt(item.amount.replace(/[^\d]/g, ''));
-            return sum + amount;
-        }, 0);
+        let calculatedSubTotal = 0;
+        
+        // 템플릿 타입에 따라 다른 데이터 구조 처리
+        if (templateType === 'detailed') {
+            // 상세 견적서: item, detail, amount 구조
+            calculatedSubTotal = costTableData.items.reduce((sum, item) => {
+                const amount = parseInt(item.amount.replace(/[^\d]/g, ''));
+                return sum + amount;
+            }, 0);
+        } else {
+            // 기본 견적서: contents, type, amount 구조
+            calculatedSubTotal = costTableData.items.reduce((sum, item) => {
+                const amount = parseInt(item.amount.replace(/[^\d]/g, ''));
+                return sum + amount;
+            }, 0);
+        }
         
         subTotal = calculatedSubTotal;
         vat = Math.round(subTotal * 0.1);
@@ -542,8 +644,10 @@ async function generateEstimateWithPartialReplacement(apiKey, projectName, proje
         console.log('Total amount (VAT 포함):', totalAmount);
     }
     
-    // 이제 subTotal과 totalAmount가 계산되었으므로 패키지 데이터 생성
-    const packageData = await generatePackageData(apiKey, projectName, projectDescription, clientName, budget, additionalRequirements, aiPrompt, uploadedFileContent, subTotal, totalAmount, packageBudgets);
+    // 기본 견적서만 패키지 데이터 생성
+    if (templateType === 'standard') {
+        packageData = await generatePackageData(apiKey, projectName, projectDescription, clientName, budget, additionalRequirements, aiPrompt, uploadedFileContent, subTotal, totalAmount, packageBudgets);
+    }
     
     const endTime = Date.now();
     console.log(`⚡ 병렬 처리 완료: ${endTime - startTime}ms`);
@@ -577,46 +681,83 @@ async function generateEstimateWithPartialReplacement(apiKey, projectName, proje
     console.log('Original description:', projectDescription);
     console.log('Overview text to replace:', overviewText);
     
-    // Replace development cost table
-    html = replaceCostTable(html, costTableData, subTotalFormatted, vatFormatted, totalAmountFormatted, subTotal);
-    
-    // Replace package options
-    console.log('Package data:', packageData);
-    html = replacePackageOptions(html, packageData);
-    
-    // Update project info with actual timeline from AI
-    const actualStartDate = timelineData.stages[0]?.period?.split(' ~ ')[0];
-    const actualEndDate = timelineData.stages[timelineData.stages.length - 1]?.period?.split(' ~ ')[1];
-    
-    if (actualStartDate && actualEndDate) {
-        // Convert MM/DD format to YYYY년 MM월 DD일 format with proper year handling
-        const currentYear = new Date().getFullYear();
-        const startMonth = parseInt(actualStartDate.split('/')[0]);
-        const startDay = actualStartDate.split('/')[1];
-        const endMonth = parseInt(actualEndDate.split('/')[0]);
-        const endDay = actualEndDate.split('/')[1];
-        
-        // Handle year rollover - if end month is before start month, assume next year
-        let startYear = currentYear;
-        let endYear = currentYear;
-        
-        if (endMonth < startMonth) {
-            endYear = currentYear + 1;
-        }
-        
-        const actualStartDateStr = `${startYear}년 ${String(startMonth).padStart(2, '0')}월 ${String(startDay).padStart(2, '0')}일`;
-        const actualEndDateStr = `${endYear}년 ${String(endMonth).padStart(2, '0')}월 ${String(endDay).padStart(2, '0')}일`;
-        
-        // Update the project info with actual timeline
-        html = html.replace(/\d{4}년 \d{2}월 \d{2}일 ~ \d{4}년 \d{2}월 \d{2}일/g, `${actualStartDateStr} ~ ${actualEndDateStr}`);
-        
-        console.log('Updated project timeline:');
-        console.log('Actual start date:', actualStartDateStr);
-        console.log('Actual end date:', actualEndDateStr);
+    // 템플릿 타입에 따라 다른 내용 교체
+    if (templateType === 'detailed') {
+        // 상세 견적서용 교체
+        html = replaceCostTableForDetailed(html, costTableData, subTotalFormatted, vatFormatted, totalAmountFormatted, subTotal);
+        html = replaceScopeAndPeriod(html, scopeAndPeriodData);
+        html = replaceDetailedSchedule(html, detailedScheduleData);
+    } else {
+        // 기본 견적서용 교체
+        html = replaceCostTable(html, costTableData, subTotalFormatted, vatFormatted, totalAmountFormatted, subTotal);
+        console.log('Package data:', packageData);
+        html = replacePackageOptions(html, packageData);
     }
     
-    // Replace timeline
-    html = replaceTimeline(html, timelineData);
+    // 템플릿 타입에 따라 개발 일정 처리
+    if (templateType === 'standard') {
+        // 기본 견적서: 개발 일정 업데이트 및 교체
+        const actualStartDate = timelineData.stages[0]?.period?.split(' ~ ')[0];
+        const actualEndDate = timelineData.stages[timelineData.stages.length - 1]?.period?.split(' ~ ')[1];
+        
+        if (actualStartDate && actualEndDate) {
+            // Convert MM/DD format to YYYY년 MM월 DD일 format with proper year handling
+            const today = new Date();
+            const currentYear = today.getFullYear();
+            const currentMonth = today.getMonth() + 1;
+            const currentDay = today.getDate();
+            
+            let startMonth = parseInt(actualStartDate.split('/')[0]);
+            let startDay = parseInt(actualStartDate.split('/')[1]);
+            const endMonth = parseInt(actualEndDate.split('/')[0]);
+            const endDay = parseInt(actualEndDate.split('/')[1]);
+            
+            // Ensure start date is in the future
+            let startYear = currentYear;
+            const startDateObj = new Date(currentYear, startMonth - 1, startDay);
+            const minStartDate = new Date(today);
+            minStartDate.setDate(minStartDate.getDate() + 7);
+            
+            if (startDateObj < minStartDate) {
+                // Move to next year if month/day has passed
+                if (startMonth < minStartDate.getMonth() + 1 || 
+                    (startMonth === minStartDate.getMonth() + 1 && startDay < minStartDate.getDate())) {
+                    startYear = currentYear + 1;
+                } else {
+                    // Same year but before minimum date, use minimum date
+                    startYear = minStartDate.getFullYear();
+                    startMonth = minStartDate.getMonth() + 1;
+                    startDay = minStartDate.getDate();
+                }
+            } else {
+                // Check if it's in the same year
+                if (startMonth < currentMonth || 
+                    (startMonth === currentMonth && startDay < currentDay)) {
+                    startYear = currentYear + 1;
+                }
+            }
+            
+            // Handle year rollover - if end month is before start month, assume next year
+            let endYear = startYear;
+            if (endMonth < startMonth || (endMonth === startMonth && endDay < startDay)) {
+                endYear = startYear + 1;
+            }
+            
+            const actualStartDateStr = `${startYear}년 ${String(startMonth).padStart(2, '0')}월 ${String(startDay).padStart(2, '0')}일`;
+            const actualEndDateStr = `${endYear}년 ${String(endMonth).padStart(2, '0')}월 ${String(endDay).padStart(2, '0')}일`;
+            
+            // Update the project info with actual timeline
+            html = html.replace(/\d{4}년 \d{2}월 \d{2}일 ~ \d{4}년 \d{2}월 \d{2}일/g, `${actualStartDateStr} ~ ${actualEndDateStr}`);
+            
+            console.log('Updated project timeline:');
+            console.log('Actual start date:', actualStartDateStr);
+            console.log('Actual end date:', actualEndDateStr);
+        }
+        
+        // Replace timeline
+        html = replaceTimeline(html, timelineData);
+    }
+    // 상세 견적서는 개발 일정 (세부)가 이미 replaceDetailedSchedule에서 처리됨
     
     // Replace payment terms with proper structure (VAT 포함 금액 기준)
     const paymentAmount = Math.round(totalAmount / 2);
@@ -634,11 +775,280 @@ async function generateEstimateWithPartialReplacement(apiKey, projectName, proje
             <td>최종 개발 완료 및 검수 후</td>
         </tr>`;
     
-    // Replace payment table - more specific targeting
-    const paymentTableRegex = /<div class="estimate-section-title">결제 조건<\/div>[\s\S]*?<table class="estimate-table">[\s\S]*?<tbody>[\s\S]*?<\/tbody>[\s\S]*?<\/table>/g;
+    // Replace payment table - more specific targeting (기본 견적서와 상세 견적서 모두 처리)
+    // 기본 견적서: "결제 조건", 상세 견적서: "5. 결제 조건"
+    const paymentTableRegex = /<div class="estimate-section-title">(?:5\.\s*)?결제 조건<\/div>[\s\S]*?<table class="estimate-table">[\s\S]*?<tbody>[\s\S]*?<\/tbody>[\s\S]*?<\/table>/g;
     html = html.replace(paymentTableRegex, (match) => {
-        return match.replace(/<tbody>[\s\S]*?<\/tbody>/g, `<tbody>${paymentTableBody}</tbody>`);
+        // 상세 견적서의 경우 합계 행이 있는지 확인
+        if (match.includes('합계')) {
+            // 합계 행 포함
+            const paymentTableBodyWithTotal = `${paymentTableBody}
+        <tr style="background-color: #e8f4f8; font-weight: bold;">
+            <td colspan="2">합계 (V.A.T 포함)</td>
+            <td>${formatAmount(totalAmount)}</td>
+            <td></td>
+        </tr>`;
+            return match.replace(/<tbody>[\s\S]*?<\/tbody>/g, `<tbody>${paymentTableBodyWithTotal}</tbody>`);
+        } else {
+            // 기본 견적서 (합계 행 없음)
+            return match.replace(/<tbody>[\s\S]*?<\/tbody>/g, `<tbody>${paymentTableBody}</tbody>`);
+        }
     });
+    
+    // Replace maintenance section (유지보수 및 지원)
+    // 기본 견적서와 상세 견적서 모두 처리
+    const maintenanceContent = `
+            <li>무상 하자보수: 개발 완료 후 계약기간만큼</li>
+            <li>긴급 지원: 24시간 이내 대응</li>
+            <li>시스템 모니터링: 서버 및 성능 모니터링, 장애 대응</li>
+            <li>오류 수정: 시스템 오류 및 버그 수정</li>
+            <li>안정화 지원: 시스템 안정성 점검 및 안정화 지원</li>`;
+    
+    // 기본 견적서: "유지보수 및 지원", 상세 견적서: "6. 유지보수 및 지원"
+    const maintenanceRegex = /<div class="estimate-section-title">(?:6\.\s*)?유지보수 및 지원<\/div>[\s\S]*?<ul class="estimate-package-features">[\s\S]*?<\/ul>/g;
+    html = html.replace(maintenanceRegex, (match) => {
+        return match.replace(/<ul class="estimate-package-features">[\s\S]*?<\/ul>/g, `<ul class="estimate-package-features">${maintenanceContent}
+        </ul>`);
+    });
+    
+    return html;
+}
+
+// Replace cost table for detailed estimate (상세 견적서용)
+function replaceCostTableForDetailed(html, costTableData, subTotalFormatted, vatFormatted, totalAmountFormatted, subTotal = 0) {
+    let newTableBody = '';
+    let totalCost = 0;
+    
+    costTableData.items.forEach((item) => {
+        const amountStr = item.amount.replace(/[^\d]/g, '');
+        const amount = parseInt(amountStr) || 0;
+        totalCost += amount;
+        
+        newTableBody += `
+            <tr>
+                <td>${item.item}</td>
+                <td>${item.detail}</td>
+                <td>${item.amount}</td>
+            </tr>`;
+    });
+    
+    // Add total row
+    newTableBody += `
+        <tr style="background-color: #e8f4f8; font-weight: bold;">
+            <td colspan="2">총 개발 비용</td>
+            <td>${subTotalFormatted}</td>
+        </tr>`;
+    
+    // Replace cost table tbody
+    const costTableRegex = /<div class="estimate-section-title">3\. 개발 비용 견적<\/div>[\s\S]*?<table class="estimate-table">[\s\S]*?<tbody>[\s\S]*?<\/tbody>[\s\S]*?<\/table>/g;
+    html = html.replace(costTableRegex, (match) => {
+        return match.replace(/<tbody>[\s\S]*?<\/tbody>/g, `<tbody>${newTableBody}</tbody>`);
+    });
+    
+    return html;
+}
+
+// Replace scope and period (개발 범위 및 기간)
+function replaceScopeAndPeriod(html, scopeAndPeriodData) {
+    let newTableBody = '';
+    
+    scopeAndPeriodData.stages.forEach((stage) => {
+        newTableBody += `
+            <tr>
+                <td>${stage.stage}</td>
+                <td>${stage.content}</td>
+                <td>${stage.period}</td>
+            </tr>`;
+    });
+    
+    // Add total row
+    newTableBody += `
+        <tr style="background-color: #e8f4f8; font-weight: bold;">
+            <td colspan="2">총 개발 기간</td>
+            <td>${scopeAndPeriodData.totalPeriod || '협의'}</td>
+        </tr>`;
+    
+    // Replace scope and period table tbody
+    const scopeTableRegex = /<div class="estimate-section-title">2\. 개발 범위 및 기간<\/div>[\s\S]*?<table class="estimate-table">[\s\S]*?<tbody>[\s\S]*?<\/tbody>[\s\S]*?<\/table>/g;
+    html = html.replace(scopeTableRegex, (match) => {
+        return match.replace(/<tbody>[\s\S]*?<\/tbody>/g, `<tbody>${newTableBody}</tbody>`);
+    });
+    
+    return html;
+}
+
+// Replace detailed schedule (개발 일정 세부)
+function replaceDetailedSchedule(html, detailedScheduleData) {
+    if (!detailedScheduleData || !detailedScheduleData.tasks || detailedScheduleData.tasks.length === 0) {
+        console.warn('개발 일정 (세부) 데이터가 없습니다.');
+        return html;
+    }
+    
+    const today = new Date();
+    const currentYear = today.getFullYear();
+    const currentMonth = today.getMonth() + 1;
+    const currentDay = today.getDate();
+    const minStartDate = new Date(today);
+    minStartDate.setDate(minStartDate.getDate() + 7);
+    
+    // 단계별로 그룹화
+    const tasksByStage = {};
+    detailedScheduleData.tasks.forEach((task) => {
+        if (!tasksByStage[task.stage]) {
+            tasksByStage[task.stage] = [];
+        }
+        tasksByStage[task.stage].push(task);
+    });
+    
+    let newTableBody = '';
+    let firstTaskStartYear = null;
+    let firstTaskStartMonth = null;
+    
+    // 각 단계별로 HTML 생성
+    Object.keys(tasksByStage).forEach((stage, stageIndex) => {
+        const tasks = tasksByStage[stage];
+        const rowspan = tasks.length;
+        
+        tasks.forEach((task, taskIndex) => {
+            let formattedPeriod = task.period;
+            
+            // Convert MM/DD ~ MM/DD format to YYYY년 MM월 DD일 ~ YYYY년 MM월 DD일 format if needed
+            if (task.period.includes(' ~ ') && task.period.includes('/')) {
+                const [startDate, endDate] = task.period.split(' ~ ');
+                
+                if (startDate.includes('/') && endDate.includes('/')) {
+                    let startMonth = parseInt(startDate.split('/')[0]);
+                    let startDay = parseInt(startDate.split('/')[1]);
+                    const endMonth = parseInt(endDate.split('/')[0]);
+                    const endDay = parseInt(endDate.split('/')[1]);
+                    
+                    let startYear = currentYear;
+                    let endYear = currentYear;
+                    
+                    // For first task, ensure it's in the future
+                    if (stageIndex === 0 && taskIndex === 0) {
+                        const startDateObj = new Date(currentYear, startMonth - 1, startDay);
+                        if (startDateObj < minStartDate) {
+                            // If the date is before minimum start date, use minimum start date
+                            startYear = minStartDate.getFullYear();
+                            startMonth = minStartDate.getMonth() + 1;
+                            startDay = minStartDate.getDate();
+                        } else {
+                            // Check if it's in the same year
+                            if (startMonth < currentMonth || 
+                                (startMonth === currentMonth && startDay < currentDay)) {
+                                startYear = currentYear + 1;
+                            }
+                        }
+                        
+                        firstTaskStartYear = startYear;
+                        firstTaskStartMonth = startMonth;
+                    } else {
+                        // For subsequent tasks, use the year from first task as base
+                        if (firstTaskStartYear !== null) {
+                            startYear = firstTaskStartYear;
+                            if (startMonth < firstTaskStartMonth) {
+                                startYear = firstTaskStartYear + 1;
+                            }
+                        } else {
+                            if (startMonth < currentMonth || 
+                                (startMonth === currentMonth && startDay < currentDay)) {
+                                startYear = currentYear + 1;
+                            }
+                        }
+                    }
+                    
+                    // End date: same year as start, or next year if end month < start month
+                    endYear = startYear;
+                    if (endMonth < startMonth || (endMonth === startMonth && endDay < startDay)) {
+                        endYear = startYear + 1;
+                    }
+                    
+                    const formattedStartDate = `${startYear}년 ${String(startMonth).padStart(2, '0')}월 ${String(startDay).padStart(2, '0')}일`;
+                    const formattedEndDate = `${endYear}년 ${String(endMonth).padStart(2, '0')}월 ${String(endDay).padStart(2, '0')}일`;
+                    formattedPeriod = `${formattedStartDate} ~ ${formattedEndDate}`;
+                }
+            }
+            
+            if (taskIndex === 0) {
+                // 첫 번째 작업: rowspan 포함
+                newTableBody += `
+            <tr>
+                <td${rowspan > 1 ? ` rowspan="${rowspan}"` : ''}>${stage}</td>
+                <td>${task.task}</td>
+                <td>${formattedPeriod}</td>
+            </tr>`;
+            } else {
+                // 나머지 작업: rowspan 없이
+                newTableBody += `
+            <tr>
+                <td>${task.task}</td>
+                <td>${formattedPeriod}</td>
+            </tr>`;
+            }
+        });
+    });
+    
+    // Replace detailed schedule table tbody
+    const scheduleTableRegex = /<div class="estimate-section-title">4\. 세부 개발 일정<\/div>[\s\S]*?<table class="estimate-timeline-table">[\s\S]*?<tbody>[\s\S]*?<\/tbody>[\s\S]*?<\/table>/g;
+    html = html.replace(scheduleTableRegex, (match) => {
+        return match.replace(/<tbody>[\s\S]*?<\/tbody>/g, `<tbody>${newTableBody}</tbody>`);
+    });
+    
+    return html;
+}
+
+// Replace deliverables (산출물)
+function replaceDeliverables(html, deliverablesData) {
+    let newTableBody = '';
+    
+    deliverablesData.deliverables.forEach((deliverable) => {
+        newTableBody += `
+            <tr>
+                <td>${deliverable.category}</td>
+                <td>${deliverable.item}</td>
+                <td>${deliverable.format}</td>
+            </tr>`;
+    });
+    
+    // Replace deliverables table tbody
+    const deliverablesTableRegex = /<div class="estimate-section-title">7\. 산출물<\/div>[\s\S]*?<table class="estimate-table">[\s\S]*?<tbody>[\s\S]*?<\/tbody>[\s\S]*?<\/table>/g;
+    html = html.replace(deliverablesTableRegex, (match) => {
+        return match.replace(/<tbody>[\s\S]*?<\/tbody>/g, `<tbody>${newTableBody}</tbody>`);
+    });
+    
+    return html;
+}
+
+// Generate closing remarks (맺음말)
+async function generateClosingRemarks(apiKey, projectName, projectDescription, additionalRequirements, aiPrompt, uploadedFileContent) {
+    const systemPrompt = `당신은 견적서 작성 전문가입니다. 주어진 프로젝트 정보를 바탕으로 견적서의 맺음말을 생성해주세요.
+
+규칙:
+1. 프로젝트에 적합한 전문적인 맺음말 작성
+2. 프로젝트의 성공적 수행에 대한 의지와 전문성 강조
+3. 2-3문장으로 구성
+4. 자연스럽고 전문적인 문체 사용
+5. 견적서에 적합한 공식적인 톤 유지
+6. 문장으로만 응답 (JSON 형식 사용 안 함)`;
+
+    const userPrompt = `프로젝트명: ${projectName}
+프로젝트 설명: ${projectDescription}
+추가 요구사항: ${additionalRequirements || '없음'}
+${aiPrompt ? '\n추가 지시사항: ' + aiPrompt : ''}
+${uploadedFileContent ? '\n\n참고 파일 내용:\n' + uploadedFileContent : ''}
+
+위 정보를 바탕으로 견적서에 적합한 맺음말을 작성해주세요.`;
+
+    const response = await callOpenAIAPI(apiKey, systemPrompt, userPrompt, false);
+    return response.trim();
+}
+
+// Replace closing remarks (맺음말)
+function replaceClosingRemarks(html, closingRemarks) {
+    const closingRemarksRegex = /<div class="estimate-section-title">8\. 맺음말<\/div>[\s\S]*?<p style="font-size: 15px; color: #333; margin: 15px 0;">[\s\S]*?<\/p>/g;
+    html = html.replace(closingRemarksRegex, `<div class="estimate-section-title">8. 맺음말</div>
+    <p style="font-size: 15px; color: #333; margin: 15px 0;">${closingRemarks}</p>`);
     
     return html;
 }
@@ -755,6 +1165,181 @@ ${uploadedFileContent ? '\n\n참고 파일 내용:\n' + uploadedFileContent : ''
     return costData;
 }
 
+// Generate cost table data for detailed estimate (상세 견적서용)
+async function generateCostTableDataForDetailed(apiKey, projectName, projectDescription, budget, additionalRequirements, aiPrompt, uploadedFileContent) {
+    let subTotal = 0;
+    if (budget) {
+        const budgetMatch = budget.match(/(\d+)/);
+        if (budgetMatch) {
+            let totalAmount = parseInt(budgetMatch[1]);
+            if (typeof budget === 'string' && budget.includes('만원')) {
+                totalAmount = totalAmount * 10000;
+            } else if (typeof budget === 'string' && budget.includes('천원')) {
+                totalAmount = totalAmount * 1000;
+            }
+            subTotal = totalAmount;
+        }
+    }
+
+    const systemPrompt = `당신은 견적서 작성 전문가입니다. 주어진 프로젝트 정보를 바탕으로 개발 비용 견적 테이블의 항목들을 생성해주세요.
+
+규칙:
+1. 각 항목은 "항목", "상세 내용", "비용 (원)"으로 구성
+2. 프로젝트 유형에 맞는 적절한 항목들로 구성
+3. Amount는 원화로 표시 (예: 1,500,000원)
+4. 모든 금액은 반드시 양수여야 함
+5. 프로젝트의 복잡도와 규모를 분석하여 현실적인 가격으로 설정
+6. 반드시 정확히 6개의 항목만 생성하세요 (6개를 초과하면 안 됩니다)
+7. 상세 내용은 반드시 50글자 이내로 작성하세요 (50글자를 초과하면 안 됩니다)
+8. 동사형이나 문장형 표현을 사용하지 마세요 (예: "분석합니다", "설계합니다" 등은 사용 금지)
+9. JSON 형식으로 응답
+
+응답 형식:
+{
+  "items": [
+    {"item": "항목명", "detail": "상세 내용", "amount": "1,500,000원"},
+    ...
+  ]
+}`;
+
+    const userPrompt = `프로젝트명: ${projectName}
+프로젝트 설명: ${projectDescription}
+${subTotal > 0 ? `\n중요: 총 예산은 ${subTotal.toLocaleString('ko-KR')}원(VAT 제외)입니다. 이 금액에 맞춰 항목들의 비용을 배분해주세요.` : ''}
+추가 요구사항: ${additionalRequirements || '없음'}
+${aiPrompt ? '\n추가 지시사항: ' + aiPrompt : ''}
+${uploadedFileContent ? '\n\n참고 파일 내용:\n' + uploadedFileContent : ''}
+
+위 정보를 바탕으로 개발 비용 견적 항목들을 생성해주세요.
+
+중요: 
+1. 반드시 정확히 6개의 항목만 생성하세요. 6개를 초과하거나 미만이면 안 됩니다.
+2. 상세 내용은 반드시 50글자 이내로 작성하세요. 50글자를 초과하면 안 됩니다.
+3. 동사형이나 문장형 표현을 사용하지 마세요. 예: "분석합니다", "설계합니다" 등은 사용 금지`;
+
+    const response = await callOpenAIAPI(apiKey, systemPrompt, userPrompt);
+    return safeJSONParse(response);
+}
+
+// Generate scope and period data (개발 범위 및 기간)
+async function generateScopeAndPeriodData(apiKey, projectName, projectDescription, timeline, additionalRequirements, aiPrompt, uploadedFileContent) {
+    const systemPrompt = `당신은 견적서 작성 전문가입니다. 주어진 프로젝트 정보를 바탕으로 개발 범위 및 기간 테이블을 생성해주세요.
+
+규칙:
+1. 각 단계는 "단계", "주요 내용", "기간"으로 구성
+2. 프로젝트 유형에 맞는 적절한 단계들로 구성
+3. 기간은 "X주" 또는 "X개월" 형식으로 표시
+4. 반드시 정확히 4개의 단계만 생성하세요 (4개를 초과하면 안 됩니다)
+5. 주요 내용은 반드시 50글자 이내로 작성하세요 (50글자를 초과하면 안 됩니다)
+6. JSON 형식으로 응답
+
+응답 형식:
+{
+  "stages": [
+    {"stage": "단계명", "content": "주요 내용", "period": "9/19 ~ 9/30"},
+    ...
+  ],
+  "totalPeriod": "약 X주"
+}`;
+
+    // 현재 날짜 정보 추가
+    const today = new Date();
+    const currentMonth = today.getMonth() + 1;
+    const currentDay = today.getDate();
+    const currentYear = today.getFullYear();
+    
+    const userPrompt = `프로젝트명: ${projectName}
+프로젝트 설명: ${projectDescription}
+${timeline ? `개발 기간: ${timeline}` : ''}
+추가 요구사항: ${additionalRequirements || '없음'}
+${aiPrompt ? '\n추가 지시사항: ' + aiPrompt : ''}
+${uploadedFileContent ? '\n\n참고 파일 내용:\n' + uploadedFileContent : ''}
+
+위 정보를 바탕으로 개발 범위 및 기간 테이블을 생성해주세요.
+
+중요: 
+1. 반드시 정확히 4개의 단계만 생성하세요. 4개를 초과하거나 미만이면 안 됩니다.
+2. 주요 내용은 반드시 50글자 이내로 작성하세요. 50글자를 초과하면 안 됩니다.
+3. 현재 날짜는 ${currentYear}년 ${currentMonth}월 ${currentDay}일입니다. 모든 일정은 이 날짜 이후로 시작해야 합니다.
+4. 기간 형식이 "MM/DD ~ MM/DD"인 경우, 시작 날짜는 현재 날짜 이후여야 합니다.`;
+
+    const response = await callOpenAIAPI(apiKey, systemPrompt, userPrompt);
+    return safeJSONParse(response);
+}
+
+// Generate detailed schedule data (개발 일정 세부)
+async function generateDetailedScheduleData(apiKey, projectName, projectDescription, timeline, additionalRequirements, aiPrompt, uploadedFileContent) {
+    const systemPrompt = `당신은 견적서 작성 전문가입니다. 주어진 프로젝트 정보를 바탕으로 개발 일정 (세부) 테이블을 생성해주세요.
+
+규칙:
+1. 각 단계별로 여러 상세 작업을 포함
+2. "단계", "상세 작업", "일정"으로 구성
+3. 같은 단계의 여러 작업은 rowspan을 사용할 수 있도록 구성
+4. 일정은 "MM/DD ~ MM/DD" 형식
+5. 반드시 정확히 11개의 작업만 생성하세요 (11개를 초과하면 안 됩니다)
+6. JSON 형식으로 응답
+
+응답 형식:
+{
+  "tasks": [
+    {"stage": "단계명", "task": "상세 작업", "period": "10/1 ~ 10/7"},
+    ...
+  ]
+}`;
+
+    // 현재 날짜 정보 추가
+    const today = new Date();
+    const currentMonth = today.getMonth() + 1;
+    const currentDay = today.getDate();
+    const currentYear = today.getFullYear();
+    
+    const userPrompt = `프로젝트명: ${projectName}
+프로젝트 설명: ${projectDescription}
+${timeline ? `개발 기간: ${timeline}` : ''}
+추가 요구사항: ${additionalRequirements || '없음'}
+${aiPrompt ? '\n추가 지시사항: ' + aiPrompt : ''}
+${uploadedFileContent ? '\n\n참고 파일 내용:\n' + uploadedFileContent : ''}
+
+위 정보를 바탕으로 개발 일정 (세부) 테이블을 생성해주세요.
+
+중요: 
+1. 반드시 정확히 11개의 작업만 생성하세요. 11개를 초과하거나 미만이면 안 됩니다.
+2. 현재 날짜는 ${currentYear}년 ${currentMonth}월 ${currentDay}일입니다. 모든 일정은 이 날짜 이후로 시작해야 합니다.
+3. 첫 번째 작업의 시작 날짜는 현재 날짜 이후여야 합니다.`;
+
+    const response = await callOpenAIAPI(apiKey, systemPrompt, userPrompt);
+    return safeJSONParse(response);
+}
+
+// Generate deliverables data (산출물)
+async function generateDeliverablesData(apiKey, projectName, projectDescription, additionalRequirements, aiPrompt, uploadedFileContent) {
+    const systemPrompt = `당신은 견적서 작성 전문가입니다. 주어진 프로젝트 정보를 바탕으로 산출물 테이블을 생성해주세요.
+
+규칙:
+1. 각 산출물은 "구분", "산출물", "형식"으로 구성
+2. 프로젝트 유형에 맞는 적절한 산출물들로 구성
+3. 형식은 "PDF", "문서" 등으로 표시
+4. JSON 형식으로 응답
+
+응답 형식:
+{
+  "deliverables": [
+    {"category": "구분", "item": "산출물명", "format": "PDF"},
+    ...
+  ]
+}`;
+
+    const userPrompt = `프로젝트명: ${projectName}
+프로젝트 설명: ${projectDescription}
+추가 요구사항: ${additionalRequirements || '없음'}
+${aiPrompt ? '\n추가 지시사항: ' + aiPrompt : ''}
+${uploadedFileContent ? '\n\n참고 파일 내용:\n' + uploadedFileContent : ''}
+
+위 정보를 바탕으로 산출물 테이블을 생성해주세요.`;
+
+    const response = await callOpenAIAPI(apiKey, systemPrompt, userPrompt);
+    return safeJSONParse(response);
+}
+
 // Generate package data using AI
 async function generatePackageData(apiKey, projectName, projectDescription, clientName, budget, additionalRequirements, aiPrompt, uploadedFileContent, subTotal, totalAmount, packageBudgets = null) {
     const formatAmount = (amount) => {
@@ -847,17 +1432,22 @@ ${totalAmount > 0 ? `중요: 표준형 패키지의 가격은 반드시 Total Am
 
 
 // Generate project overview using AI
-async function generateProjectOverview(apiKey, projectName, projectDescription, additionalRequirements, aiPrompt, uploadedFileContent) {
+async function generateProjectOverview(apiKey, projectName, projectDescription, additionalRequirements, aiPrompt, uploadedFileContent, templateType = 'standard') {
+    // 상세 견적서는 한 문장만 생성
+    const sentenceCount = templateType === 'detailed' ? '1개의 문장으로만 구성 (반드시 1문장)' : '1-2개의 문장으로만 구성 (최대 2문장)';
+    const charLimit = templateType === 'detailed' ? '8. 반드시 한 문장으로만 작성하세요. 문장이 두 개 이상이면 안 됩니다.\n9. 반드시 100자 이내로 작성하세요. 100자를 초과하면 안 됩니다.' : '';
+    
     const systemPrompt = `당신은 견적서 작성 전문가입니다. 주어진 프로젝트 정보를 바탕으로 간결하고 명확한 프로젝트 개요를 생성해주세요.
 
 규칙:
-1. 1-2개의 문장으로만 구성 (최대 2문장)
+1. ${sentenceCount}
 2. 자연스럽고 전문적인 문체 사용
 3. 프로젝트의 핵심 목적과 특징을 간결하게 설명
 4. 기술적 세부사항보다는 비즈니스 가치와 사용자 혜택 중심으로 작성
 5. 견적서에 적합한 공식적인 톤 유지
 6. "혁신적인", "차세대" 등 과장된 표현 사용 금지
 7. 불필요한 수식어나 장황한 설명 금지
+${charLimit}
 
 응답 형식:
 문장으로만 응답하세요. JSON이나 다른 형식은 사용하지 마세요.`;
@@ -868,7 +1458,8 @@ async function generateProjectOverview(apiKey, projectName, projectDescription, 
 ${aiPrompt ? '\n추가 지시사항: ' + aiPrompt : ''}
 ${uploadedFileContent ? '\n\n참고 파일 내용:\n' + uploadedFileContent : ''}
 
-위 정보를 바탕으로 견적서에 적합한 프로젝트 개요를 자연스러운 문장 형식으로 작성해주세요.`;
+위 정보를 바탕으로 견적서에 적합한 프로젝트 개요를 자연스러운 문장 형식으로 작성해주세요.
+${templateType === 'detailed' ? '\n중요: 반드시 한 문장으로만 작성하고, 100자 이내로 작성하세요. 100자를 초과하면 안 됩니다.' : ''}`;
 
     // 프로젝트 개요는 텍스트 형식이므로 JSON 형식 사용 안 함
     const response = await callOpenAIAPI(apiKey, systemPrompt, userPrompt, false);
@@ -1205,7 +1796,21 @@ function replacePackageOptions(html, packageData) {
 // Replace timeline in HTML
 function replaceTimeline(html, timelineData) {
     let newTimelineBody = '';
-    let currentYear = new Date().getFullYear();
+    const today = new Date();
+    const currentYear = today.getFullYear();
+    const currentMonth = today.getMonth() + 1;
+    const currentDay = today.getDate();
+    
+    // Calculate the minimum start date (today + 7 days to ensure it's in the future)
+    const minStartDate = new Date(today);
+    minStartDate.setDate(minStartDate.getDate() + 7);
+    const minStartYear = minStartDate.getFullYear();
+    const minStartMonth = minStartDate.getMonth() + 1;
+    const minStartDay = minStartDate.getDate();
+    
+    let firstStageStartYear = null;
+    let firstStageStartMonth = null;
+    let firstStageStartDay = null;
     
     timelineData.stages.forEach((stage, index) => {
         // Convert MM/DD ~ MM/DD format to YYYY년 MM월 DD일 ~ YYYY년 MM월 DD일 format
@@ -1216,22 +1821,62 @@ function replaceTimeline(html, timelineData) {
             const [startDate, endDate] = period.split(' ~ ');
             
             if (startDate.includes('/') && endDate.includes('/')) {
-                const startMonth = parseInt(startDate.split('/')[0]);
-                const startDay = startDate.split('/')[1];
+                let startMonth = parseInt(startDate.split('/')[0]);
+                let startDay = parseInt(startDate.split('/')[1]);
                 const endMonth = parseInt(endDate.split('/')[0]);
-                const endDay = endDate.split('/')[1];
+                const endDay = parseInt(endDate.split('/')[1]);
                 
-                // For first stage, use current year
                 let startYear = currentYear;
                 let endYear = currentYear;
                 
-                // If end month is before start month, it's next year
-                if (endMonth < startMonth) {
-                    endYear = currentYear + 1;
+                // For first stage, ensure it's in the future
+                if (index === 0) {
+                    // Check if the start date is before today
+                    const startDateObj = new Date(currentYear, startMonth - 1, startDay);
+                    if (startDateObj < minStartDate) {
+                        // Move to next year if month/day has passed
+                        if (startMonth < minStartMonth || 
+                            (startMonth === minStartMonth && startDay < minStartDay)) {
+                            startYear = currentYear + 1;
+                        } else {
+                            // Same year but before minimum date, use minimum date
+                            startYear = minStartYear;
+                            startMonth = minStartMonth;
+                            startDay = minStartDay;
+                        }
+                    } else {
+                        // Check if it's in the same year
+                        if (startMonth < currentMonth || 
+                            (startMonth === currentMonth && startDay < currentDay)) {
+                            startYear = currentYear + 1;
+                        }
+                    }
+                    
+                    firstStageStartYear = startYear;
+                    firstStageStartMonth = startMonth;
+                    firstStageStartDay = startDay;
+                } else {
+                    // For subsequent stages, use the year from first stage as base
+                    if (firstStageStartYear !== null) {
+                        startYear = firstStageStartYear;
+                        // If start month is before first stage start month, it's next year
+                        if (startMonth < firstStageStartMonth) {
+                            startYear = firstStageStartYear + 1;
+                        }
+                    } else {
+                        // Fallback: use current year
+                        if (startMonth < currentMonth || 
+                            (startMonth === currentMonth && startDay < currentDay)) {
+                            startYear = currentYear + 1;
+                        }
+                    }
                 }
                 
-                // Update currentYear for next iteration
-                currentYear = endYear;
+                // End date: same year as start, or next year if end month < start month
+                endYear = startYear;
+                if (endMonth < startMonth || (endMonth === startMonth && endDay < startDay)) {
+                    endYear = startYear + 1;
+                }
                 
                 const formattedStartDate = `${startYear}년 ${String(startMonth).padStart(2, '0')}월 ${String(startDay).padStart(2, '0')}일`;
                 const formattedEndDate = `${endYear}년 ${String(endMonth).padStart(2, '0')}월 ${String(endDay).padStart(2, '0')}일`;
@@ -1736,10 +2381,562 @@ function downloadPDF() {
     });
 }
 
+// Get estimate CSS styles
+async function getEstimateCSS() {
+    try {
+        const response = await fetch('styles.css');
+        const cssContent = await response.text();
+        
+        // Find the start of estimate CSS section (around line 566)
+        const estimateStartIndex = cssContent.indexOf('/* 전체 선 두께 얇게 조정 */');
+        if (estimateStartIndex === -1) {
+            throw new Error('견적서 CSS 섹션을 찾을 수 없습니다.');
+        }
+        
+        // Extract from estimate section to the end (or until CodeMirror styles)
+        const estimateEndIndex = cssContent.indexOf('/* CodeMirror Styles */', estimateStartIndex);
+        const estimateCSS = estimateEndIndex !== -1 
+            ? cssContent.substring(estimateStartIndex, estimateEndIndex).trim()
+            : cssContent.substring(estimateStartIndex).trim();
+        
+        // Base styles needed for estimate
+        const baseCSS = `* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: #ffffff;
+    color: #000000;
+    line-height: 1.6;
+    padding: 40px 20px;
+}`;
+        
+        return baseCSS + '\n\n' + estimateCSS;
+    } catch (error) {
+        console.warn('CSS 파일 로드 실패, 기본 스타일 사용:', error);
+        // Return minimal CSS if file can't be loaded
+        return `* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: #ffffff;
+    color: #000000;
+    line-height: 1.6;
+    padding: 40px 20px;
+}
+
+.estimate-container {
+    max-width: 750px;
+    margin: 0 auto;
+    background: white;
+    padding: 40px;
+    box-shadow: 0 0 20px rgba(0,0,0,0.1);
+}
+
+.estimate-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    padding-bottom: 15px;
+    border-bottom: 2px solid #000;
+}
+
+.estimate-title-section {
+    display: flex;
+    align-items: center;
+}
+
+.estimate-title {
+    font-size: 28px;
+    font-weight: bold;
+    color: #000;
+    margin-right: 10px;
+}
+
+.estimate-subtitle {
+    font-size: 18px;
+    font-weight: normal;
+    color: #000;
+}
+
+.estimate-logo {
+    width: 50px;
+    height: 50px;
+    background-image: url('fornerds_logo.png');
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+}
+
+.estimate-date {
+    font-size: 15px;
+    margin: 15px 0;
+    color: #333;
+}
+
+.estimate-client-info {
+    font-size: 15px;
+    margin-bottom: 15px;
+    color: #333;
+}
+
+.estimate-divider-dotted {
+    border-top: 1px dotted #000;
+    margin: 15px 0;
+}
+
+.estimate-divider-solid {
+    border-top: 1px solid #000;
+    margin: 15px 0;
+}
+
+.estimate-info-section {
+    margin: 20px 0;
+}
+
+.estimate-info-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin: 8px 0;
+    padding: 4px 0;
+}
+
+.estimate-info-label {
+    font-weight: bold;
+    color: #333;
+    flex: 0 0 auto;
+}
+
+.estimate-info-value {
+    text-align: right;
+    color: #000;
+    flex: 0 0 auto;
+}
+
+.estimate-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+}
+
+.estimate-table th {
+    background-color: #f8f9fa;
+    padding: 12px 10px;
+    text-align: left;
+    font-weight: bold;
+    border-bottom: 2px solid #000;
+    font-size: 13px;
+}
+
+.estimate-table th:last-child,
+.estimate-table td:last-child {
+    text-align: right;
+}
+
+.estimate-table td {
+    padding: 10px 10px;
+    border-bottom: 1px solid #eee;
+    font-size: 13px;
+}
+
+.estimate-table tr:nth-child(even) {
+    background-color: #f9f9f9;
+}
+
+.estimate-summary {
+    text-align: right;
+    margin: 15px 0;
+    font-size: 16px;
+}
+
+.estimate-summary-item {
+    display: flex;
+    justify-content: space-between;
+    margin: 4px 0;
+    padding: 3px 0;
+}
+
+.estimate-summary .estimate-summary-total {
+    font-weight: bold;
+    font-size: 18px;
+    border-top: 0.1px solid #b9b9b9;
+    padding-top: 10px;
+    margin-top: 15px;
+}
+
+.estimate-section-title {
+    font-size: 18px;
+    font-weight: bold;
+    margin: 25px 0 15px 0;
+    color: #000;
+}
+
+.estimate-package-section {
+    margin: 8px 0;
+    padding: 15px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    background-color: #f8f9fa;
+}
+
+.estimate-package-title {
+    font-size: 16px;
+    font-weight: bold;
+    color: #20B2AA;
+    margin: 6px 0 0px 0;
+}
+
+.estimate-package-price {
+    font-size: 20px;
+    font-weight: bold;
+    color: #000;
+    margin: 4px 0 4px 0;
+}
+
+.estimate-package-features {
+    list-style: none;
+    padding-left: 0;
+}
+
+.estimate-package-features li {
+    margin: 6px 0;
+    padding-left: 18px;
+    position: relative;
+    font-size: 14px;
+}
+
+.estimate-package-features li:before {
+    content: "✓";
+    position: absolute;
+    left: 0;
+    color: #20B2AA;
+    font-weight: bold;
+}
+
+.estimate-timeline-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 15px 0;
+    font-size: 13px;
+}
+
+.estimate-timeline-table th,
+.estimate-timeline-table td {
+    padding: 10px;
+    text-align: left;
+    border: 1px solid #ddd;
+}
+
+.estimate-timeline-table th {
+    background-color: #f8f9fa;
+    font-weight: bold;
+    font-size: 12px;
+}
+
+.estimate-notes {
+    margin-top: 25px;
+    padding-top: 5px;
+    border-top: 1px solid #000;
+}
+
+.estimate-notes ul {
+    list-style: none;
+    padding-left: 0;
+}
+
+.estimate-notes li {
+    margin: 10px 0;
+    padding-left: 20px;
+    position: relative;
+    font-size: 13px;
+}
+
+.estimate-notes li:before {
+    content: "•";
+    position: absolute;
+    left: 0;
+    color: #000;
+    font-weight: bold;
+}
+
+.estimate-signature-section {
+    margin-top: 20px;
+    margin-bottom: 20px;
+    padding-top: 20px;
+    display: flex;
+    justify-content: flex-end;
+}
+
+.estimate-signature-content-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 30px;
+}
+
+.estimate-signature-texts {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 5px;
+}
+
+.estimate-signature-name {
+    font-size: 14px;
+    font-weight: bold;
+    color: #000;
+    text-align: right;
+}
+
+.estimate-signature-representative {
+    font-size: 14px;
+    color: #333;
+    text-align: right;
+}
+
+.estimate-signature-seal {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.seal-image {
+    width: 70px;
+    height: 70px;
+    object-fit: contain;
+    display: block;
+}
+
+.estimate-signature-value {
+    font-size: 14px;
+    color: #000;
+    text-align: left;
+}
+
+.estimate-footer {
+    margin-top: 25px;
+    padding-top: 15px;
+    border-top: 1px solid #000;
+    text-align: right;
+    font-size: 12px;
+    color: #666;
+}
+
+.company-info-section {
+    margin: 120px 0 20px 0;
+}`;
+    }
+}
+
+// Save HTML to 견적서 folder
+async function saveHTMLToFolder() {
+    // Check if there's any content to save
+    if (!currentHtmlCode && !originalHtmlCode) {
+        showMessage('저장할 내용이 없습니다. 먼저 견적서를 생성해주세요.', 'error');
+        return;
+    }
+    
+    let htmlContent = currentHtmlCode || originalHtmlCode;
+    if (!htmlContent || htmlContent.trim() === '') {
+        showMessage('저장할 HTML 내용이 없습니다.', 'error');
+        return;
+    }
+    
+    // Get CSS and wrap HTML with full document structure
+    const estimateCSS = await getEstimateCSS();
+    
+    // Extract project name for title
+    let projectName = '견적서';
+    try {
+        const projectNameMatch = htmlContent.match(/프로젝트명<\/div>\s*<div[^>]*>([^<]+)</);
+        if (projectNameMatch && projectNameMatch[1]) {
+            projectName = projectNameMatch[1].trim();
+        }
+    } catch (e) {
+        console.warn('프로젝트명 추출 실패:', e);
+    }
+    
+    // Wrap HTML content with full document structure including CSS
+    const fullHTML = `<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>${projectName} 견적서</title>
+    <style>
+${estimateCSS}
+    </style>
+</head>
+<body>
+${htmlContent}
+</body>
+</html>`;
+    
+    htmlContent = fullHTML;
+    
+    // Remove special characters for filename
+    const filenameProjectName = projectName.replace(/[<>:"/\\|?*]/g, '_').replace(/\s+/g, '_');
+    
+    // Create filename with date and project name
+    const now = new Date();
+    const dateStr = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`;
+    const filename = `견적서_${filenameProjectName}_${dateStr}.html`;
+    
+    // Try to use File System Access API (modern browsers)
+    if ('showDirectoryPicker' in window) {
+        try {
+            // Ask user to select the 견적서 folder
+            const folderHandle = await window.showDirectoryPicker({
+                mode: 'readwrite',
+                startIn: 'documents'
+            });
+            
+            // Check if selected folder is "견적서" or try to get/create it
+            let targetFolderHandle = folderHandle;
+            
+            if (folderHandle.name !== '견적서') {
+                try {
+                    // Try to get existing "견적서" folder
+                    targetFolderHandle = await folderHandle.getDirectoryHandle('견적서', { create: true });
+                } catch (e) {
+                    // If can't create subfolder, ask user to navigate to 견적서 folder
+                    showMessage('"견적서" 폴더를 선택해주세요.', 'error');
+                    return;
+                }
+            }
+            
+            // Create or get file handle
+            const fileHandle = await targetFolderHandle.getFileHandle(filename, { create: true });
+            const writable = await fileHandle.createWritable();
+            await writable.write(htmlContent);
+            await writable.close();
+            
+            showMessage(`HTML 파일이 저장되었습니다: 견적서/${filename}`, 'success');
+            return;
+        } catch (error) {
+            // User cancelled or error occurred, fall back to download
+            if (error.name !== 'AbortError') {
+                console.warn('File System Access API 실패, 다운로드로 대체:', error);
+            } else {
+                // User cancelled
+                return;
+            }
+        }
+    }
+    
+    // Fallback: Use download with folder name in filename
+    // This will prompt user to save in "견적서" folder manually
+    const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename; // Just filename, user will save to 견적서 folder
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    
+    showMessage(`HTML 파일이 다운로드되었습니다: ${filename}\n다운로드 폴더에서 "견적서" 폴더로 이동하세요.`, 'success');
+}
+
+// Load HTML file
+async function loadHTMLFile(event) {
+    const file = event.target.files[0];
+    if (!file) {
+        return;
+    }
+    
+    // Check file extension
+    if (!file.name.toLowerCase().endsWith('.html')) {
+        showMessage('HTML 파일만 불러올 수 있습니다.', 'error');
+        return;
+    }
+    
+    try {
+        const fileContent = await readTextFile(file);
+        
+        // Extract estimate content from full HTML document
+        let estimateContent = '';
+        
+        // Create a temporary DOM element to parse HTML
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = fileContent;
+        
+        // Try to find .estimate-container element
+        const estimateContainer = tempDiv.querySelector('.estimate-container');
+        if (estimateContainer) {
+            estimateContent = estimateContainer.outerHTML;
+        } else {
+            // Try to extract body content
+            const bodyElement = tempDiv.querySelector('body');
+            if (bodyElement) {
+                estimateContent = bodyElement.innerHTML.trim();
+            } else {
+                // Check if the content itself is the estimate (no body tag)
+                const hasBodyTag = fileContent.match(/<body[^>]*>/i);
+                if (!hasBodyTag) {
+                    // No body tag, assume the whole content is the estimate
+                    estimateContent = fileContent.trim();
+                } else {
+                    // Has body tag but couldn't parse, try regex fallback
+                    const bodyMatch = fileContent.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+                    if (bodyMatch && bodyMatch[1]) {
+                        estimateContent = bodyMatch[1].trim();
+                    } else {
+                        throw new Error('HTML 구조를 파싱할 수 없습니다.');
+                    }
+                }
+            }
+        }
+        
+        if (!estimateContent || estimateContent === '') {
+            showMessage('HTML 파일에서 견적서 내용을 찾을 수 없습니다.', 'error');
+            return;
+        }
+        
+        // Update preview and code editor
+        document.getElementById('previewContainer').innerHTML = estimateContent;
+        
+        // Update HTML code editor
+        if (codeEditor) {
+            codeEditor.setValue(estimateContent);
+        } else {
+            document.getElementById('htmlCodeEditor').value = estimateContent;
+        }
+        
+        // Update global variables
+        originalHtmlCode = estimateContent;
+        currentHtmlCode = estimateContent;
+        
+        // Switch to preview tab
+        const previewTab = document.querySelector('.preview-area .tab');
+        if (previewTab) {
+            switchTab('preview', previewTab);
+        }
+        
+        showMessage(`HTML 파일이 성공적으로 불러와졌습니다: ${file.name}`, 'success');
+        
+        // Reset file input
+        event.target.value = '';
+    } catch (error) {
+        console.error('HTML 파일 로드 오류:', error);
+        showMessage(`HTML 파일 로드 중 오류가 발생했습니다: ${error.message}`, 'error');
+    }
+}
+
 // Load default estimate template
 async function loadDefaultEstimate() {
     try {
-        const response = await fetch('견적서_템플릿.html');
+        const selectedTemplate = getSelectedTemplate();
+        const response = await fetch(selectedTemplate);
         const defaultEstimateHtml = await response.text();
         
         document.getElementById('previewContainer').innerHTML = defaultEstimateHtml;
