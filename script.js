@@ -410,12 +410,14 @@ async function extractProjectInfoFromRaw(apiKey, rawData, aiPrompt, uploadedFile
 - 프로젝트명은 2-30자 정도의 간결하고 명확한 이름으로 생성하세요
 
 전체 예산 추출 규칙 (매우 중요):
-- "50만원" → "500000" (50 * 10000 = 500000원)
-- "100만원" → "1000000" (100 * 10000 = 1000000원)
-- "500만원" → "5000000" (500 * 10000 = 5000000원)
-- "50만원정도" → "500000"
-- "약 50만원" → "500000"
+- "50만원", "50만원정도", "약 50만원" → "500000" (50 * 10000 = 500000원)
+- "100만원", "백만원" → "1000000" (100 * 10000 = 1000000원)
+- "500만원", "5백만원", "오백만원" → "5000000" (500 * 10000 = 5000000원)
+- "천만원", "1천만원", "최소천만원" → "10000000" (1000 * 10000 = 10000000원)
+- "2천만원", "이천만원" → "20000000" (2000 * 10000 = 20000000원)
 - 만원 단위로 표시된 경우: 숫자 * 10000으로 변환하여 원 단위로 반환
+- 한글 숫자 표현도 인식: "백만원"=100만원, "오백만원"=500만원, "이천만원"=2000만원 등
+- "천만원"은 "1000만원"과 동일하게 처리 (1000 * 10000 = 10000000원)
 - 원 단위로 표시된 경우: 숫자만 추출 (예: "500000원" → "500000")
 - 예산이 명시되지 않으면 "null"로 설정
 
@@ -446,7 +448,14 @@ ${rawData}
 ${aiPrompt ? '\n추가 지시사항: ' + aiPrompt : ''}
 ${uploadedFileContent ? '\n\n참고 파일 내용:\n' + uploadedFileContent : ''}
 
-위 원시 데이터에서 견적서 작성에 필요한 정보를 추출해주세요.`;
+위 원시 데이터에서 견적서 작성에 필요한 정보를 추출해주세요.
+
+중요: 예산 추출 시 다음 표현들을 올바르게 변환해야 합니다:
+- "천만원", "1천만원", "최소천만원" → "10000000" (천만원 = 1000만원 = 10,000,000원)
+- "백만원" → "1000000" (100만원 = 1,000,000원)
+- "5백만원", "오백만원" → "5000000" (500만원 = 5,000,000원)
+- "이천만원", "2천만원" → "20000000" (2000만원 = 20,000,000원)
+한글 숫자 표현도 정확히 인식하여 변환하세요.`;
 
     const response = await callOpenAIAPI(apiKey, systemPrompt, userPrompt);
     const projectInfo = safeJSONParse(response);
@@ -719,22 +728,13 @@ async function generateEstimateWithPartialReplacement(apiKey, projectName, proje
             minStartDate.setDate(minStartDate.getDate() + 7);
             
             if (startDateObj < minStartDate) {
-                // Move to next year if month/day has passed
-                if (startMonth < minStartDate.getMonth() + 1 || 
-                    (startMonth === minStartDate.getMonth() + 1 && startDay < minStartDate.getDate())) {
-                    startYear = currentYear + 1;
-                } else {
-                    // Same year but before minimum date, use minimum date
-                    startYear = minStartDate.getFullYear();
-                    startMonth = minStartDate.getMonth() + 1;
-                    startDay = minStartDate.getDate();
-                }
+                // Use minimum start date (7 days from today)
+                startYear = minStartDate.getFullYear();
+                startMonth = minStartDate.getMonth() + 1;
+                startDay = minStartDate.getDate();
             } else {
-                // Check if it's in the same year
-                if (startMonth < currentMonth || 
-                    (startMonth === currentMonth && startDay < currentDay)) {
-                    startYear = currentYear + 1;
-                }
+                // Date is already in the future, keep current year
+                startYear = currentYear;
             }
             
             // Handle year rollover - if end month is before start month, assume next year
@@ -927,6 +927,9 @@ function replaceDetailedSchedule(html, detailedScheduleData) {
                     
                     // For first task, ensure it's in the future
                     if (stageIndex === 0 && taskIndex === 0) {
+                        // Always start from current year
+                        startYear = currentYear;
+                        
                         const startDateObj = new Date(currentYear, startMonth - 1, startDay);
                         if (startDateObj < minStartDate) {
                             // If the date is before minimum start date, use minimum start date
@@ -934,11 +937,8 @@ function replaceDetailedSchedule(html, detailedScheduleData) {
                             startMonth = minStartDate.getMonth() + 1;
                             startDay = minStartDate.getDate();
                         } else {
-                            // Check if it's in the same year
-                            if (startMonth < currentMonth || 
-                                (startMonth === currentMonth && startDay < currentDay)) {
-                                startYear = currentYear + 1;
-                            }
+                            // Date is already in the future, keep current year
+                            startYear = currentYear;
                         }
                         
                         firstTaskStartYear = startYear;
@@ -1831,25 +1831,20 @@ function replaceTimeline(html, timelineData) {
                 
                 // For first stage, ensure it's in the future
                 if (index === 0) {
-                    // Check if the start date is before today
+                    // Always start from current year
+                    startYear = currentYear;
+                    
+                    // Check if the start date is before minimum start date
                     const startDateObj = new Date(currentYear, startMonth - 1, startDay);
                     if (startDateObj < minStartDate) {
-                        // Move to next year if month/day has passed
-                        if (startMonth < minStartMonth || 
-                            (startMonth === minStartMonth && startDay < minStartDay)) {
-                            startYear = currentYear + 1;
-                        } else {
-                            // Same year but before minimum date, use minimum date
-                            startYear = minStartYear;
-                            startMonth = minStartMonth;
-                            startDay = minStartDay;
-                        }
+                        // Use minimum start date (7 days from today)
+                        startYear = minStartYear;
+                        startMonth = minStartMonth;
+                        startDay = minStartDay;
                     } else {
-                        // Check if it's in the same year
-                        if (startMonth < currentMonth || 
-                            (startMonth === currentMonth && startDay < currentDay)) {
-                            startYear = currentYear + 1;
-                        }
+                        // If month/day is in the past (but after minStartDate), it's already in the future
+                        // Keep current year
+                        startYear = currentYear;
                     }
                     
                     firstStageStartYear = startYear;
@@ -1911,15 +1906,21 @@ function replaceTimeline(html, timelineData) {
                 const endMonth = parseInt(lastEndDate.split('/')[0]);
                 const endDay = parseInt(lastEndDate.split('/')[1]);
                 
-                // Determine correct year based on current date (same logic as above)
+                // Determine correct year based on current date
                 const today = new Date();
                 const baseYear = today.getFullYear();
+                const minStartDate = new Date(today);
+                minStartDate.setDate(minStartDate.getDate() + 7);
                 
-                // Start date: use current year (or next year if month has passed)
+                // Start date: use current year, but ensure it's at least 7 days from today
                 let startYear = baseYear;
-                if (startMonth < today.getMonth() + 1 || 
-                    (startMonth === today.getMonth() + 1 && startDay < today.getDate())) {
-                    startYear = baseYear + 1;
+                const startDateObj = new Date(baseYear, startMonth - 1, startDay);
+                if (startDateObj < minStartDate) {
+                    // Use minimum start date year (should be same as baseYear unless year rollover)
+                    startYear = minStartDate.getFullYear();
+                } else {
+                    // Date is already in the future, keep current year
+                    startYear = baseYear;
                 }
                 
                 // End date: same year as start, or next year if end month < start month
