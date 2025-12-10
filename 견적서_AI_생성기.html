@@ -53,6 +53,7 @@
                             <select id="templateSelect" onchange="updateTemplatePreview()">
                                 <option value="견적서_템플릿.html">기본 견적서</option>
                                 <option value="상세견적서_템플릿.html">상세 견적서</option>
+                                <option value="단계별견적서_템플릿.html">단계별 견적서</option>
                             </select>
                             <small style="color: #666; font-size: 12px;">견적서 양식을 선택하세요</small>
                         </div>
@@ -116,6 +117,7 @@
                         <select id="rawTemplateSelect" onchange="updateTemplatePreview()">
                             <option value="견적서_템플릿.html">기본 견적서</option>
                             <option value="상세견적서_템플릿.html">상세 견적서</option>
+                            <option value="단계별견적서_템플릿.html">단계별 견적서</option>
                         </select>
                         <small style="color: #666; font-size: 12px;">견적서 양식을 선택하세요</small>
                     </div>
@@ -205,6 +207,40 @@
                     </div>
                 </div>
             </div>
+        </div>
+    </div>
+
+    <!-- AI 채팅 버튼 (플로팅) -->
+    <div class="chat-button" id="chatButton" onclick="toggleChat()" title="AI 채팅으로 견적서 수정">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M20 2H4C2.9 2 2 2.9 2 4V22L6 18H20C21.1 18 22 17.1 22 16V4C22 2.9 21.1 2 20 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+    </div>
+
+    <!-- AI 채팅 모달 -->
+    <div class="chat-modal" id="chatModal">
+        <div class="chat-header">
+            <h3>AI 채팅으로 견적서 수정</h3>
+            <button class="chat-close" onclick="toggleChat()">×</button>
+        </div>
+        <div class="chat-messages" id="chatMessages">
+            <div class="chat-message bot">
+                <div class="message-content">
+                    안녕하세요! 현재 견적서의 내용을 수정하고 싶으시면 말씀해주세요.<br><br>
+                    예:<br>
+                    • "프로젝트명을 변경해줘"<br>
+                    • "가격을 10% 올려줘"<br>
+                    • "기능 목록에 항목 추가해줘" 등
+                </div>
+            </div>
+        </div>
+        <div class="chat-input-container">
+            <textarea id="chatInput" placeholder="수정 요청을 입력하세요..." rows="2"></textarea>
+            <button class="chat-send-btn" onclick="sendChatMessage()">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M22 2L11 13M22 2L15 22L11 13M22 2L2 9L11 13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+            </button>
         </div>
     </div>
 

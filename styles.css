@@ -658,7 +658,7 @@ body.pdf-mode .estimate-client-info + .estimate-divider-solid {
 }
 
 .estimate-info-section {
-    margin: 20px 0;
+    margin: 24px 0;
 }
 
 /* 회사 정보 섹션 (사업자번호 포함) 간격 조정 */
@@ -670,20 +670,23 @@ body.pdf-mode .estimate-client-info + .estimate-divider-solid {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin: 8px 0;
-    padding: 4px 0;
+    margin: 10px 0;
+    padding: 6px 0;
 }
 
 .estimate-info-label {
-    font-weight: bold;
-    color: #333;
+    font-weight: 600;
+    color: #4a5568;
     flex: 0 0 auto;
+    font-size: 14px;
 }
 
 .estimate-info-value {
     text-align: right;
-    color: #000;
+    color: #1a202c;
     flex: 0 0 auto;
+    font-size: 14px;
+    font-weight: 500;
 }
 
 .estimate-table {
@@ -746,24 +749,36 @@ body.pdf-mode .estimate-client-info + .estimate-divider-solid {
 }
 
 .estimate-section-title {
-    font-size: 18px;
-    font-weight: bold;
-    margin: 25px 0 15px 0;
-    color: #000;
+    font-size: 20px;
+    font-weight: 700;
+    margin: 24px 0 16px 0;
+    color: #1a202c;
+    letter-spacing: -0.02em;
+    padding-bottom: 8px;
+    border-bottom: 2px solid #e2e8f0;
+}
+
+.estimate-section-title:first-of-type {
+    margin-top: 20px;
+}
+
+/* 프로젝트 개요 다음 섹션 제목 간격 조정 */
+.estimate-section-title + .estimate-section-title {
+    margin-top: 24px;
 }
 
 /* 패키지 옵션 섹션 제목 간격 조정 */
 .estimate-package-options-section .estimate-section-title {
-    margin: 160px 0 10px 0;
+    margin: 32px 0 16px 0;
 }
 
 /* 개발 일정 섹션 제목 간격 조정 */
 .estimate-timeline-section .estimate-section-title {
-    margin: 130px 0 10px 0;
+    margin: 32px 0 16px 0;
 }
 
 .estimate-timeline-section-detailed .estimate-section-title {
-    margin: 110px 0 10px 0;
+    margin: 32px 0 16px 0;
 }
 
 /* 개발 일정 섹션 전체 간격 조정 */
@@ -796,17 +811,18 @@ body.pdf-mode .estimate-client-info + .estimate-divider-solid {
 }
 
 .estimate-package-title {
-    font-size: 16px;
-    font-weight: bold;
-    color: #20B2AA;
-    margin: 6px 0 0px 0;
+    font-size: 17px;
+    font-weight: 600;
+    color: #1a202c;
+    margin: 0 0 8px 0;
+    letter-spacing: -0.01em;
 }
 
 .estimate-package-price {
-    font-size: 20px;
-    font-weight: bold;
-    color: #000;
-    margin: 4px 0 4px 0;
+    font-size: 22px;
+    font-weight: 700;
+    color: #1a202c;
+    margin: 8px 0 4px 0;
 }
 
 .estimate-package-features {
@@ -982,4 +998,450 @@ body.pdf-mode .estimate-client-info + .estimate-divider-solid {
 
 .CodeMirror-foldgutter-folded:after {
     content: '\25B8';
+}
+
+/* 단계별 견적 섹션 스타일 */
+.estimate-phase-section {
+    margin: 40px 0;
+    padding: 0;
+    background-color: transparent;
+    border: none;
+    page-break-inside: auto;
+    break-inside: auto;
+}
+
+.estimate-phase-section:first-of-type {
+    margin-top: 16px;
+}
+
+.estimate-phase-header {
+    margin-bottom: 24px;
+    padding-bottom: 12px;
+    border-bottom: 2px solid #20B2AA;
+}
+
+.estimate-phase-title {
+    font-size: 20px;
+    font-weight: 700;
+    color: #1a202c;
+    letter-spacing: -0.02em;
+}
+
+.estimate-phase-period {
+    font-size: 14px;
+    color: #718096;
+    font-weight: 500;
+    margin-top: 4px;
+}
+
+.estimate-phase-description {
+    font-size: 14px;
+    color: #4a5568;
+    margin: 12px 0 20px 0;
+    line-height: 1.7;
+}
+
+.estimate-phase-total-row {
+    background-color: #f7fafc !important;
+    font-weight: bold;
+}
+
+.estimate-phase-total-row td {
+    padding: 12px 10px;
+    border-top: 2px solid #20B2AA;
+    border-bottom: 2px solid #20B2AA;
+}
+
+.estimate-phase-total {
+    margin-top: 24px;
+    padding: 16px 20px;
+    background-color: #f7fafc;
+    border-radius: 8px;
+    text-align: right;
+    border: 1px solid #e2e8f0;
+}
+
+.estimate-phase-total-label {
+    font-size: 15px;
+    font-weight: 600;
+    color: #2d3748;
+    margin-right: 12px;
+}
+
+.estimate-phase-total-price {
+    font-size: 18px;
+    font-weight: 700;
+    color: #1a202c;
+}
+
+.estimate-phase-footer {
+    margin-top: 24px;
+    padding-top: 16px;
+    border-top: 1px solid #e2e8f0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.estimate-phase-price {
+    font-size: 16px;
+    font-weight: 600;
+    color: #1a202c;
+}
+
+.estimate-phase-period {
+    font-size: 14px;
+    color: #718096;
+}
+
+/* 옵션 섹션 스타일 */
+.estimate-option-section {
+    margin: 24px 0;
+    padding: 24px;
+    background-color: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.estimate-option-header {
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.estimate-option-title {
+    font-size: 17px;
+    font-weight: 600;
+    color: #1a202c;
+    letter-spacing: -0.01em;
+}
+
+.estimate-option-content {
+    margin-top: 20px;
+}
+
+.estimate-phase-section > .estimate-option-content {
+    margin-top: 16px;
+}
+
+.estimate-option-subsection {
+    margin-bottom: 24px;
+}
+
+.estimate-option-subsection:last-child {
+    margin-bottom: 0;
+}
+
+.estimate-option-subtitle {
+    font-size: 15px;
+    font-weight: 600;
+    color: #2d3748;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.estimate-option-list {
+    list-style: none;
+    padding-left: 0;
+    margin: 0;
+}
+
+.estimate-option-list li {
+    margin: 10px 0;
+    padding-left: 24px;
+    position: relative;
+    font-size: 14px;
+    color: #4a5568;
+    line-height: 1.7;
+}
+
+.estimate-option-list li:before {
+    content: "•";
+    position: absolute;
+    left: 8px;
+    color: #20B2AA;
+    font-weight: bold;
+    font-size: 18px;
+    line-height: 1.2;
+}
+
+.estimate-option-footer {
+    margin-top: 20px;
+    padding-top: 16px;
+    border-top: 1px solid #e2e8f0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.estimate-option-price {
+    font-size: 16px;
+    font-weight: 600;
+    color: #1a202c;
+}
+
+.estimate-option-period {
+    font-size: 14px;
+    color: #718096;
+}
+
+/* 서브 페이즈 스타일 */
+.estimate-subphase {
+    margin: 16px 0;
+    padding: 16px;
+    background-color: #f7fafc;
+    border-radius: 6px;
+}
+
+.estimate-subphase-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: #2d3748;
+    margin-bottom: 10px;
+}
+
+.estimate-subphase .estimate-option-list {
+    margin-top: 10px;
+}
+
+.estimate-subphase .estimate-option-list li {
+    font-size: 13px;
+    color: #4a5568;
+}
+
+.estimate-subphase .estimate-option-list li:before {
+    color: #718096;
+}
+
+/* 패키지 옵션 섹션 스타일 개선 */
+.estimate-package-options-section {
+    margin-top: 50px;
+}
+
+.estimate-package-options-section .estimate-package-section {
+    margin: 16px 0;
+    padding: 20px;
+    background-color: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.estimate-package-period {
+    font-size: 14px;
+    color: #718096;
+    margin-top: 6px;
+    font-weight: 500;
+}
+
+/* AI 채팅 UI 스타일 */
+.chat-button {
+    position: fixed;
+    bottom: 30px;
+    right: 30px;
+    width: 60px;
+    height: 60px;
+    background: #20B2AA;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(32, 178, 170, 0.4);
+    z-index: 999;
+    transition: all 0.3s ease;
+    color: white;
+}
+
+.chat-button:hover {
+    background: #1a9b94;
+    transform: scale(1.1);
+    box-shadow: 0 6px 20px rgba(32, 178, 170, 0.6);
+}
+
+.chat-modal {
+    position: fixed;
+    bottom: 100px;
+    right: 30px;
+    width: 400px;
+    height: 600px;
+    background: white;
+    border-radius: 16px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+    display: none;
+    flex-direction: column;
+    z-index: 1000;
+    overflow: hidden;
+}
+
+.chat-modal.active {
+    display: flex;
+}
+
+.chat-header {
+    background: #20B2AA;
+    color: white;
+    padding: 16px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.chat-header h3 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+}
+
+.chat-close {
+    background: none;
+    border: none;
+    color: white;
+    font-size: 28px;
+    cursor: pointer;
+    padding: 0;
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    transition: background 0.2s;
+}
+
+.chat-close:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.chat-messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px;
+    background: #f7fafc;
+}
+
+.chat-message {
+    margin-bottom: 16px;
+    display: flex;
+    animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.chat-message.user {
+    justify-content: flex-end;
+}
+
+.chat-message.bot {
+    justify-content: flex-start;
+}
+
+.message-content {
+    max-width: 75%;
+    padding: 12px 16px;
+    border-radius: 12px;
+    line-height: 1.5;
+    font-size: 14px;
+}
+
+.chat-message.user .message-content {
+    background: #20B2AA;
+    color: white;
+    border-bottom-right-radius: 4px;
+}
+
+.chat-message.bot .message-content {
+    background: white;
+    color: #2d3748;
+    border: 1px solid #e2e8f0;
+    border-bottom-left-radius: 4px;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.chat-input-container {
+    padding: 16px;
+    background: white;
+    border-top: 1px solid #e2e8f0;
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+#chatInput {
+    flex: 1;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 14px;
+    font-family: inherit;
+    resize: none;
+    outline: none;
+    transition: border-color 0.2s;
+    min-height: 40px;
+    height: 40px;
+    line-height: 20px;
+    box-sizing: border-box;
+}
+
+#chatInput:focus {
+    border-color: #20B2AA;
+}
+
+.chat-send-btn {
+    width: 40px;
+    height: 40px;
+    background: #20B2AA;
+    border: none;
+    border-radius: 8px;
+    color: white;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+    flex-shrink: 0;
+}
+
+.chat-send-btn:hover {
+    background: #1a9b94;
+    transform: scale(1.05);
+    box-shadow: 0 2px 8px rgba(32, 178, 170, 0.4);
+}
+
+.chat-send-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.chat-message.loading {
+    opacity: 0.7;
+}
+
+.chat-message.loading .message-content::after {
+    content: '...';
+    animation: dots 1.5s steps(4, end) infinite;
+}
+
+@keyframes dots {
+    0%, 20% {
+        content: '.';
+    }
+    40% {
+        content: '..';
+    }
+    60%, 100% {
+        content: '...';
+    }
 }

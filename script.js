@@ -493,9 +493,15 @@ function detectTemplateType(templateHtml, templateFileName = '') {
     if (templateFileName && (templateFileName.includes('상세설계') || templateFileName.includes('상세견적서'))) {
         return 'detailed'; // 상세 견적서
     }
+    if (templateFileName && templateFileName.includes('단계별견적서')) {
+        return 'phase-based'; // 단계별 견적서
+    }
     // HTML 내용으로 확인
     if (templateHtml.includes('상세설계') || templateHtml.includes('상세설계 견적서') || templateHtml.includes('상세 견적서')) {
         return 'detailed'; // 상세 견적서
+    }
+    if (templateHtml.includes('단계별 개발 비용 견적') || templateHtml.includes('estimate-phase-section')) {
+        return 'phase-based'; // 단계별 견적서
     }
     return 'standard'; // 기본 견적서
 }
@@ -592,7 +598,7 @@ async function generateEstimateWithPartialReplacement(apiKey, projectName, proje
     console.log('🚀 병렬 AI API 호출 시작...');
     const startTime = Date.now();
     
-    let costTableData, overviewText, timelineData, packageData, scopeAndPeriodData, detailedScheduleData;
+    let costTableData, overviewText, timelineData, packageData, scopeAndPeriodData, detailedScheduleData, phaseBasedData;
     
     if (templateType === 'detailed') {
         // 상세 견적서용 데이터 생성
@@ -608,6 +614,17 @@ async function generateEstimateWithPartialReplacement(apiKey, projectName, proje
             generateTimelineData(apiKey, projectName, projectDescription, timeline, additionalRequirements, aiPrompt, uploadedFileContent, packageBudgets),
             generateScopeAndPeriodData(apiKey, projectName, projectDescription, timeline, additionalRequirements, aiPrompt, uploadedFileContent),
             generateDetailedScheduleData(apiKey, projectName, projectDescription, timeline, additionalRequirements, aiPrompt, uploadedFileContent)
+        ]);
+    } else if (templateType === 'phase-based') {
+        // 단계별 견적서용 데이터 생성
+        [
+            phaseBasedData,
+            overviewText,
+            timelineData
+        ] = await Promise.all([
+            generatePhaseBasedData(apiKey, projectName, projectDescription, budget, timeline, additionalRequirements, aiPrompt, uploadedFileContent),
+            generateProjectOverview(apiKey, projectName, projectDescription, additionalRequirements, aiPrompt, uploadedFileContent, 'standard'),
+            generateTimelineData(apiKey, projectName, projectDescription, timeline, additionalRequirements, aiPrompt, uploadedFileContent, packageBudgets)
         ]);
     } else {
         // 기본 견적서용 데이터 생성
@@ -635,6 +652,23 @@ async function generateEstimateWithPartialReplacement(apiKey, projectName, proje
                 const amount = parseInt(item.amount.replace(/[^\d]/g, ''));
                 return sum + amount;
             }, 0);
+        } else if (templateType === 'phase-based') {
+            // 단계별 견적서: 각 단계의 견적 합산
+            if (phaseBasedData && phaseBasedData.phases) {
+                phaseBasedData.phases.forEach((phase) => {
+                    if (phase.estimate) {
+                        // 견적 문자열에서 숫자 추출 (예: "₩50,000,000원")
+                        const estimateMatch = phase.estimate.match(/[\d,]+/);
+                        if (estimateMatch) {
+                            const numbers = estimateMatch[0].replace(/,/g, '');
+                            const amount = parseInt(numbers);
+                            if (!isNaN(amount)) {
+                                calculatedSubTotal += amount;
+                            }
+                        }
+                    }
+                });
+            }
         } else {
             // 기본 견적서: contents, type, amount 구조
             calculatedSubTotal = costTableData.items.reduce((sum, item) => {
@@ -683,8 +717,22 @@ async function generateEstimateWithPartialReplacement(apiKey, projectName, proje
         .replace(/\[일정\]/g, endDateStr ? `${startDateStr} ~ ${endDateStr}` : '협의');
     
     // Replace project overview
-    const overviewRegex = /<p style="font-size: 15px; color: #333; margin: 15px 0;">[\s\S]*?<\/p>/g;
-    html = html.replace(overviewRegex, `<p style="font-size: 15px; color: #333; margin: 15px 0;">${overviewText}</p>`);
+    // [프로젝트 개요 내용] 플레이스홀더 교체
+    html = html.replace(/\[프로젝트 개요 내용\]/g, overviewText);
+    
+    // 추가로 일반적인 프로젝트 개요 패턴도 교체
+    const overviewPatterns = [
+        /<p style="font-size: 15px; color: #333; margin:[\s\S]*?">\[프로젝트 개요 내용\]<\/p>/g,
+        /<p[^>]*>\[프로젝트 개요 내용\]<\/p>/g
+    ];
+    
+    overviewPatterns.forEach(pattern => {
+        html = html.replace(pattern, (match) => {
+            const styleMatch = match.match(/style="[^"]*"/);
+            const style = styleMatch ? styleMatch[0] : 'style="font-size: 15px; color: #333; margin: 0 0 20px 0;"';
+            return `<p ${style}>${overviewText}</p>`;
+        });
+    });
     
     console.log('Project overview replacement:');
     console.log('Original description:', projectDescription);
@@ -696,6 +744,9 @@ async function generateEstimateWithPartialReplacement(apiKey, projectName, proje
         html = replaceCostTableForDetailed(html, costTableData, subTotalFormatted, vatFormatted, totalAmountFormatted, subTotal);
         html = replaceScopeAndPeriod(html, scopeAndPeriodData);
         html = replaceDetailedSchedule(html, detailedScheduleData);
+    } else if (templateType === 'phase-based') {
+        // 단계별 견적서용 교체
+        html = replacePhaseBasedEstimate(html, phaseBasedData);
     } else {
         // 기본 견적서용 교체
         html = replaceCostTable(html, costTableData, subTotalFormatted, vatFormatted, totalAmountFormatted, subTotal);
@@ -704,8 +755,8 @@ async function generateEstimateWithPartialReplacement(apiKey, projectName, proje
     }
     
     // 템플릿 타입에 따라 개발 일정 처리
-    if (templateType === 'standard') {
-        // 기본 견적서: 개발 일정 업데이트 및 교체
+    if (templateType === 'standard' || templateType === 'phase-based') {
+        // 기본 견적서 및 단계별 견적서: 개발 일정 업데이트 및 교체
         const actualStartDate = timelineData.stages[0]?.period?.split(' ~ ')[0];
         const actualEndDate = timelineData.stages[timelineData.stages.length - 1]?.period?.split(' ~ ')[1];
         
@@ -760,8 +811,70 @@ async function generateEstimateWithPartialReplacement(apiKey, projectName, proje
     // 상세 견적서는 개발 일정 (세부)가 이미 replaceDetailedSchedule에서 처리됨
     
     // Replace payment terms with proper structure (VAT 포함 금액 기준)
-    const paymentAmount = Math.round(totalAmount / 2);
-    const paymentTableBody = `
+    let paymentTableBody = '';
+    
+    if (templateType === 'phase-based' && phaseBasedData && phaseBasedData.phases) {
+        // 단계별 견적서: 각 단계별 결제 조건 생성
+        const phases = phaseBasedData.phases;
+        const phaseCount = phases.length;
+        
+        // 각 단계의 견적 추출 및 합산
+        let phaseEstimates = [];
+        let totalPhaseEstimate = 0;
+        phases.forEach((phase) => {
+            let phaseEstimate = 0;
+            if (phase.estimate) {
+                const estimateMatch = phase.estimate.match(/[\d,]+/);
+                if (estimateMatch) {
+                    phaseEstimate = parseInt(estimateMatch[0].replace(/,/g, ''));
+                }
+            }
+            phaseEstimates.push(phaseEstimate);
+            totalPhaseEstimate += phaseEstimate;
+        });
+        
+        // 계약금 (전체의 30%)
+        const contractAmount = Math.round(totalAmount * 0.3);
+        paymentTableBody += `
+        <tr>
+            <td>계약금</td>
+            <td>30%</td>
+            <td>${formatAmount(contractAmount)}</td>
+            <td>계약 체결 시</td>
+        </tr>`;
+        
+        // 각 단계별 결제 조건 (나머지 70%를 단계별 견적 비율로 분배)
+        let remainingAmount = totalAmount - contractAmount;
+        phases.forEach((phase, index) => {
+            const phaseNumber = phase.phaseNumber || (index + 1);
+            const phaseEstimate = phaseEstimates[index];
+            
+            // 마지막 단계는 나머지 금액 모두
+            let phaseAmount;
+            let phaseRatio;
+            if (index === phases.length - 1) {
+                phaseAmount = remainingAmount;
+                phaseRatio = Math.round((phaseAmount / totalAmount) * 100 * 10) / 10;
+            } else {
+                // 각 단계의 견적 비율에 따라 분배
+                const phaseRatioPercent = totalPhaseEstimate > 0 ? (phaseEstimate / totalPhaseEstimate) : (1 / phaseCount);
+                phaseAmount = Math.round(remainingAmount * phaseRatioPercent);
+                phaseRatio = Math.round((phaseAmount / totalAmount) * 100 * 10) / 10;
+                remainingAmount -= phaseAmount;
+            }
+            
+            paymentTableBody += `
+        <tr>
+            <td>${phaseNumber}단계 완료</td>
+            <td>${phaseRatio}%</td>
+            <td>${formatAmount(phaseAmount)}</td>
+            <td>${phaseNumber}단계 개발 완료 및 검수 후</td>
+        </tr>`;
+        });
+    } else {
+        // 기본 견적서 및 상세 견적서: 기존 방식
+        const paymentAmount = Math.round(totalAmount / 2);
+        paymentTableBody = `
         <tr>
             <td>계약금</td>
             <td>50%</td>
@@ -774,26 +887,86 @@ async function generateEstimateWithPartialReplacement(apiKey, projectName, proje
             <td>${formatAmount(paymentAmount)}</td>
             <td>최종 개발 완료 및 검수 후</td>
         </tr>`;
+    }
     
     // Replace payment table - more specific targeting (기본 견적서와 상세 견적서 모두 처리)
-    // 기본 견적서: "결제 조건", 상세 견적서: "5. 결제 조건"
-    const paymentTableRegex = /<div class="estimate-section-title">(?:5\.\s*)?결제 조건<\/div>[\s\S]*?<table class="estimate-table">[\s\S]*?<tbody>[\s\S]*?<\/tbody>[\s\S]*?<\/table>/g;
-    html = html.replace(paymentTableRegex, (match) => {
-        // 상세 견적서의 경우 합계 행이 있는지 확인
-        if (match.includes('합계')) {
-            // 합계 행 포함
-            const paymentTableBodyWithTotal = `${paymentTableBody}
+    if (templateType === 'phase-based') {
+        // 단계별 견적서: 개별 플레이스홀더 교체
+        const phases = phaseBasedData && phaseBasedData.phases ? phaseBasedData.phases : [];
+        
+        // 계약금 교체
+        const contractAmount = Math.round(totalAmount * 0.3);
+        html = html.replace(/\[계약금 비율\]/g, '30%');
+        html = html.replace(/\[계약금 금액\]/g, formatAmount(contractAmount));
+        html = html.replace(/\[계약금 지급 시점\]/g, '계약 체결 시');
+        
+        // 각 단계별 결제 조건 교체
+        let remainingAmount = totalAmount - contractAmount;
+        let totalPhaseEstimate = 0;
+        const phaseEstimates = [];
+        
+        phases.forEach((phase) => {
+            let phaseEstimate = 0;
+            if (phase.estimate) {
+                const estimateMatch = phase.estimate.match(/[\d,]+/);
+                if (estimateMatch) {
+                    phaseEstimate = parseInt(estimateMatch[0].replace(/,/g, ''));
+                }
+            }
+            phaseEstimates.push(phaseEstimate);
+            totalPhaseEstimate += phaseEstimate;
+        });
+        
+        phases.forEach((phase, index) => {
+            const phaseNumber = phase.phaseNumber || (index + 1);
+            const phaseEstimate = phaseEstimates[index] || 0;
+            
+            // 마지막 단계는 나머지 금액 모두
+            let phaseAmount;
+            let phaseRatio;
+            if (index === phases.length - 1) {
+                phaseAmount = remainingAmount;
+            } else {
+                const phaseRatioPercent = totalPhaseEstimate > 0 ? (phaseEstimate / totalPhaseEstimate) : (1 / phases.length);
+                phaseAmount = Math.round(remainingAmount * phaseRatioPercent);
+                remainingAmount -= phaseAmount;
+            }
+            phaseRatio = Math.round((phaseAmount / totalAmount) * 100 * 10) / 10;
+            
+            // 단계별 결제 조건 교체
+            html = html.replace(
+                new RegExp(`\\[${phaseNumber}단계 비율\\]`, 'g'),
+                `${phaseRatio}%`
+            );
+            html = html.replace(
+                new RegExp(`\\[${phaseNumber}단계 금액\\]`, 'g'),
+                formatAmount(phaseAmount)
+            );
+            html = html.replace(
+                new RegExp(`\\[${phaseNumber}단계 지급 시점\\]`, 'g'),
+                `${phaseNumber}단계 개발 완료 및 검수 후`
+            );
+        });
+    } else {
+        // 기본 견적서 및 상세 견적서: 기존 방식
+        const paymentTableRegex = /<div class="estimate-section-title">(?:5\.\s*)?결제 조건<\/div>[\s\S]*?<table class="estimate-table">[\s\S]*?<tbody>[\s\S]*?<\/tbody>[\s\S]*?<\/table>/g;
+        html = html.replace(paymentTableRegex, (match) => {
+            // 상세 견적서의 경우 합계 행이 있는지 확인
+            if (match.includes('합계')) {
+                // 합계 행 포함
+                const paymentTableBodyWithTotal = `${paymentTableBody}
         <tr style="background-color: #e8f4f8; font-weight: bold;">
             <td colspan="2">합계 (V.A.T 포함)</td>
             <td>${formatAmount(totalAmount)}</td>
             <td></td>
         </tr>`;
-            return match.replace(/<tbody>[\s\S]*?<\/tbody>/g, `<tbody>${paymentTableBodyWithTotal}</tbody>`);
-        } else {
-            // 기본 견적서 (합계 행 없음)
-            return match.replace(/<tbody>[\s\S]*?<\/tbody>/g, `<tbody>${paymentTableBody}</tbody>`);
-        }
-    });
+                return match.replace(/<tbody>[\s\S]*?<\/tbody>/g, `<tbody>${paymentTableBodyWithTotal}</tbody>`);
+            } else {
+                // 기본 견적서
+                return match.replace(/<tbody>[\s\S]*?<\/tbody>/g, `<tbody>${paymentTableBody}</tbody>`);
+            }
+        });
+    }
     
     // Replace maintenance section (유지보수 및 지원)
     // 기본 견적서와 상세 견적서 모두 처리
@@ -845,6 +1018,222 @@ function replaceCostTableForDetailed(html, costTableData, subTotalFormatted, vat
         return match.replace(/<tbody>[\s\S]*?<\/tbody>/g, `<tbody>${newTableBody}</tbody>`);
     });
     
+    return html;
+}
+
+// Replace phase-based estimate (단계별 견적서)
+function replacePhaseBasedEstimate(html, phaseBasedData) {
+    if (!phaseBasedData || !phaseBasedData.phases || phaseBasedData.phases.length === 0) {
+        console.warn('단계별 견적서 데이터가 없습니다.');
+        return html;
+    }
+
+    // 각 단계 교체
+    phaseBasedData.phases.forEach((phase, index) => {
+        const phaseNumber = phase.phaseNumber || (index + 1);
+        
+        // 단계명 교체 - 여러 형식 지원
+        // 형식 1: 1단계: [1단계명]
+        // 형식 2: 1단계: [단계명 1]
+        let cleanPhaseName = phase.phaseName || `단계 ${phaseNumber}`;
+        // "1단계:", "2단계:" 등의 접두사 제거
+        cleanPhaseName = cleanPhaseName.replace(/^\d+단계:\s*/, '').trim();
+        
+        // 형식 1: [1단계명], [2단계명], [3단계명]
+        html = html.replace(
+            new RegExp(`\\[${phaseNumber}단계명\\]`, 'g'),
+            cleanPhaseName
+        );
+        
+        // 형식 2: [단계명 1], [단계명 2], [단계명 3]
+        html = html.replace(
+            new RegExp(`\\[단계명 ${phaseNumber}\\]`, 'g'),
+            cleanPhaseName
+        );
+        
+        // 형식 3: 1단계: [1단계명], 2단계: [2단계명], 3단계: [3단계명]
+        html = html.replace(
+            new RegExp(`${phaseNumber}단계: \\[${phaseNumber}단계명\\]`, 'g'),
+            `${phaseNumber}단계: ${cleanPhaseName}`
+        );
+        
+        // 형식 4: 1단계: [단계명 1], 2단계: [단계명 2], 3단계: [단계명 3]
+        html = html.replace(
+            new RegExp(`${phaseNumber}단계: \\[단계명 ${phaseNumber}\\]`, 'g'),
+            `${phaseNumber}단계: ${cleanPhaseName}`
+        );
+
+        // 개발 범위 리스트 생성
+        let scopeList = '';
+        if (phase.developmentScope && Array.isArray(phase.developmentScope)) {
+            phase.developmentScope.forEach((item) => {
+                scopeList += `                    <li>${item}</li>\n`;
+            });
+        } else {
+            // 기본 항목
+            for (let i = 1; i <= 5; i++) {
+                scopeList += `                    <li>[개발 범위 항목 ${i}]</li>\n`;
+            }
+        }
+
+        // 개발 범위 리스트 교체 - 각 단계별로 정확하게 매칭
+        const scopePattern = new RegExp(
+            `(${phaseNumber}단계: [^<]+</div>[\\s\\S]*?<strong>개발 범위:</strong>[\\s\\S]*?<ul class="estimate-option-list">)([\\s\\S]*?)(</ul>[\\s\\S]*?<div style="margin: 15px 0;">[\\s\\S]*?<strong>기술 스택:</strong>)`,
+            'g'
+        );
+        
+        html = html.replace(scopePattern, (match, before, oldList, after) => {
+            return before + '\n' + scopeList + '                ' + after;
+        });
+
+        // 기술 스택 리스트 생성
+        let techStackList = '';
+        if (phase.techStack && Array.isArray(phase.techStack)) {
+            phase.techStack.forEach((item) => {
+                techStackList += `                    <li>${item}</li>\n`;
+            });
+        } else {
+            // 기본 항목
+            for (let i = 1; i <= 4; i++) {
+                techStackList += `                    <li>[${phaseNumber}단계 기술 스택 ${i}]</li>\n`;
+            }
+        }
+
+        // 기술 스택 리스트 교체 - 각 단계별로 정확하게 매칭
+        const techStackPattern = new RegExp(
+            `(${phaseNumber}단계: [^<]+</div>[\\s\\S]*?<strong>기술 스택:</strong>[\\s\\S]*?<ul class="estimate-option-list">)([\\s\\S]*?)(</ul>[\\s\\S]*?<div class="estimate-phase-footer">)`,
+            'g'
+        );
+        
+        html = html.replace(techStackPattern, (match, before, oldList, after) => {
+            return before + '\n' + techStackList + '                ' + after;
+        });
+
+        // 견적 교체
+        html = html.replace(
+            new RegExp(`\\[${phaseNumber}단계 견적\\]`, 'g'),
+            phase.estimate || `[${phaseNumber}단계 견적]`
+        );
+
+        // 개발 기간 교체
+        html = html.replace(
+            new RegExp(`\\[${phaseNumber}단계 기간\\]`, 'g'),
+            phase.period || `[${phaseNumber}단계 기간]`
+        );
+
+        // 1단계 전체 견적 교체 (1단계만)
+        if (phaseNumber === 1) {
+            html = html.replace(
+                /\[1단계 전체 견적\]/g,
+                phase.estimate || `[1단계 전체 견적]`
+            );
+        }
+
+        // 개발 기간 교체 (footer에 있는 형식)
+        html = html.replace(
+            new RegExp(`\\[${phaseNumber}단계 개발 기간\\]`, 'g'),
+            phase.period || `[${phaseNumber}단계 개발 기간]`
+        );
+
+        // 프로젝트명 교체 (상단 테이블 및 요약 테이블)
+        // 위에서 이미 cleanPhaseName을 정의했으므로 재사용
+        html = html.replace(
+            new RegExp(`\\[${phaseNumber}단계 프로젝트명\\]`, 'g'),
+            cleanPhaseName
+        );
+
+        // 개발기간 교체 (요약 테이블)
+        html = html.replace(
+            new RegExp(`\\[${phaseNumber}단계 개발기간\\]`, 'g'),
+            phase.period || `[${phaseNumber}단계 개발기간]`
+        );
+
+        // 우선순위 교체 (요약 테이블) - AI가 생성한 값 사용, 없으면 기본값
+        const priority = phase.priority || `${phaseNumber}순위`;
+        html = html.replace(
+            new RegExp(`\\[${phaseNumber}단계 우선순위\\]`, 'g'),
+            priority
+        );
+    });
+
+    // 통합 패키지 옵션 교체
+    if (phaseBasedData.packages && Array.isArray(phaseBasedData.packages)) {
+        phaseBasedData.packages.forEach((pkg, index) => {
+            const optionLetter = String.fromCharCode(65 + index); // A, B, C
+            const optionName = pkg.name || `옵션 ${optionLetter}`;
+            
+            // 패키지명 교체
+            html = html.replace(
+                new RegExp(`옵션 ${optionLetter}: \\[패키지명 ${optionLetter}\\]`, 'g'),
+                optionName
+            );
+
+            // 패키지 견적 교체
+            html = html.replace(
+                new RegExp(`\\[옵션 ${optionLetter} 견적\\]`, 'g'),
+                pkg.estimate || `[옵션 ${optionLetter} 견적]`
+            );
+
+            // 패키지 기간 교체
+            html = html.replace(
+                new RegExp(`\\[옵션 ${optionLetter} 기간\\]`, 'g'),
+                pkg.period || `[옵션 ${optionLetter} 기간]`
+            );
+        });
+    }
+
+    // 유지보수 섹션 교체
+    if (phaseBasedData.maintenance) {
+        const maintenance = phaseBasedData.maintenance;
+        
+        // 무상 하자보수
+        if (maintenance.warranty) {
+            html = html.replace(
+                /<li>\[무상 하자보수 내용\]<\/li>/g,
+                `<li>${maintenance.warranty}</li>`
+            );
+        }
+        
+        // 유지보수 비용
+        if (maintenance.annualCost && Array.isArray(maintenance.annualCost)) {
+            let annualCostList = '';
+            maintenance.annualCost.forEach((item) => {
+                annualCostList += `                <li>${item}</li>\n`;
+            });
+            const annualCostPattern = new RegExp(
+                '(<strong>유지보수 비용 \\(연간\\):</strong>\\s*<ul class="estimate-package-features">)([\\s\\S]*?)(</ul>)',
+                'g'
+            );
+            html = html.replace(annualCostPattern, `$1\n${annualCostList}            $3`);
+        }
+        
+        // 추가 개발
+        if (maintenance.additionalDevelopment && Array.isArray(maintenance.additionalDevelopment)) {
+            let additionalDevList = '';
+            maintenance.additionalDevelopment.forEach((item) => {
+                additionalDevList += `                <li>${item}</li>\n`;
+            });
+            const additionalDevPattern = new RegExp(
+                '(<strong>추가 개발:</strong>\\s*<ul class="estimate-package-features">)([\\s\\S]*?)(</ul>)',
+                'g'
+            );
+            html = html.replace(additionalDevPattern, `$1\n${additionalDevList}            $3`);
+        }
+    }
+
+    // 특이사항 섹션 교체
+    if (phaseBasedData.specialNotes && Array.isArray(phaseBasedData.specialNotes)) {
+        let specialNotesList = '';
+        phaseBasedData.specialNotes.forEach((note) => {
+            specialNotesList += `                <li>${note}</li>\n`;
+        });
+        // 기존 특이사항 항목들을 교체 (마지막 3개 항목은 유지)
+        html = html.replace(
+            /(<div class="estimate-notes">\s*<ul>\s*)(<li>\[특이사항 1\]<\/li>\s*<li>\[특이사항 2\]<\/li>\s*<li>\[특이사항 3\]<\/li>\s*<li>\[특이사항 4\]<\/li>)/g,
+            `$1${specialNotesList}                `
+        );
+    }
+
     return html;
 }
 
@@ -1343,6 +1732,9 @@ ${uploadedFileContent ? '\n\n참고 파일 내용:\n' + uploadedFileContent : ''
 // Generate package data using AI
 async function generatePackageData(apiKey, projectName, projectDescription, clientName, budget, additionalRequirements, aiPrompt, uploadedFileContent, subTotal, totalAmount, packageBudgets = null) {
     const formatAmount = (amount) => {
+        if (isNaN(amount) || amount === null || amount === undefined) {
+            return '0원';
+        }
         return amount.toLocaleString('ko-KR') + '원';
     };
     
@@ -1376,14 +1768,23 @@ async function generatePackageData(apiKey, projectName, projectDescription, clie
 8. 기능 설명은 프로젝트 유형에 맞게 구체적이고 명확하게 작성하세요
 9. JSON 형식으로 응답
 
-가격 설정 규칙:
-${packageBudgets && packageBudgets.basic ? `- 기본형: ${parseInt(packageBudgets.basic).toLocaleString('ko-KR')}원 (지정된 가격)` : totalAmount > 0 ? `- 기본형: Total Amount의 40-50% (${Math.round(totalAmount * 0.45).toLocaleString('ko-KR')}원)` : `- 기본형: 프로젝트 복잡도에 맞는 기본 가격`}
-${packageBudgets && packageBudgets.standard ? `- 표준형: ${parseInt(packageBudgets.standard).toLocaleString('ko-KR')}원 (지정된 가격)` : totalAmount > 0 ? `- 표준형: Total Amount의 100% (${totalAmount.toLocaleString('ko-KR')}원) - 반드시 이 금액과 정확히 일치해야 합니다!` : `- 표준형: 기본형보다 1.5-2배 높은 가격`}
-${packageBudgets && packageBudgets.premium ? `- 프리미엄형: ${parseInt(packageBudgets.premium).toLocaleString('ko-KR')}원 (지정된 가격)` : totalAmount > 0 ? `- 프리미엄형: Total Amount의 150-200% (${Math.round(totalAmount * 1.75).toLocaleString('ko-KR')}원)` : `- 프리미엄형: 프로젝트 전체 예산에 맞는 가격`}
+가격 설정 규칙 (매우 중요):
+${packageBudgets && packageBudgets.basic && !isNaN(parseInt(packageBudgets.basic)) ? `- 기본형: ${parseInt(packageBudgets.basic).toLocaleString('ko-KR')}원 (지정된 가격)` : totalAmount > 0 ? `- 기본형: 프로젝트의 복잡도, 기능 수, 기술 난이도, 개발 기간 등을 종합적으로 분석하여 적절한 가격을 설정하세요. 표준형(Total Amount) 대비 기본형은 프로젝트 특성에 따라 25-50% 수준으로 설정하되, 기본적인 기능만 포함하므로 충분히 저렴한 가격이어야 합니다.` : `- 기본형: 프로젝트 복잡도, 기능 수, 기술 난이도 등을 분석하여 적절한 기본 가격을 설정하세요.`}
+${packageBudgets && packageBudgets.standard && !isNaN(parseInt(packageBudgets.standard)) ? `- 표준형: ${parseInt(packageBudgets.standard).toLocaleString('ko-KR')}원 (지정된 가격)` : totalAmount > 0 ? `- 표준형: 반드시 Total Amount인 ${totalAmount.toLocaleString('ko-KR')}원과 정확히 일치해야 합니다! (이 금액은 변경할 수 없습니다)` : `- 표준형: 프로젝트의 전체 기능과 복잡도를 고려하여 적절한 가격을 설정하세요. 기본형보다 충분히 높은 가격이어야 합니다.`}
+${packageBudgets && packageBudgets.premium && !isNaN(parseInt(packageBudgets.premium)) ? `- 프리미엄형: ${parseInt(packageBudgets.premium).toLocaleString('ko-KR')}원 (지정된 가격)` : totalAmount > 0 ? `- 프리미엄형: 프로젝트의 고급 기능, 추가 서비스, 프리미엄 요소 등을 종합적으로 분석하여 적절한 가격을 설정하세요. 표준형(Total Amount) 대비 프리미엄형은 프로젝트 특성에 따라 150-300% 수준으로 설정하되, 프리미엄 가치를 충분히 반영한 가격이어야 합니다.` : `- 프리미엄형: 프로젝트의 프리미엄 기능과 추가 가치를 고려하여 적절한 가격을 설정하세요. 표준형보다 충분히 높은 가격이어야 합니다.`}
+
+가격 판단 기준:
+- 프로젝트의 기술적 복잡도 (AI/ML, 실시간 처리, 보안 등)
+- 기능의 수와 다양성
+- 개발 기간과 인력 투입
+- 유지보수 및 지원 수준
+- 각 패키지에 포함된 기능의 가치 차이
+- 시장 가격 수준과 경쟁력
 
 CRITICAL: 
-- 표준형 패키지 가격은 반드시 Total Amount (${totalAmount > 0 ? totalAmount.toLocaleString('ko-KR') + '원' : '계산된 총액'})와 정확히 일치해야 합니다!
-- 가격은 반드시 기본형 < 표준형 < 프리미엄형 순이어야 합니다!
+${totalAmount > 0 ? `- 표준형 패키지 가격은 반드시 Total Amount (${totalAmount.toLocaleString('ko-KR')}원)와 정확히 일치해야 합니다!` : ''}
+- 가격은 반드시 기본형 < 표준형 < 프리미엄형 순이어야 하며, 각 패키지 간 가격 차이는 프로젝트 특성에 맞게 충분히 크게 설정해야 합니다!
+- 패키지 간 가격 차이가 너무 작으면 안 됩니다. 각 패키지의 가치 차이를 명확히 반영해야 합니다!
 
 응답 형식:
 {
@@ -1408,7 +1809,13 @@ ${aiPrompt ? '\n추가 지시사항: ' + aiPrompt : ''}
 ${uploadedFileContent ? '\n\n참고 파일 내용:\n' + uploadedFileContent : ''}
 
 위 정보를 바탕으로 3개의 패키지 옵션을 생성해주세요. 
-${totalAmount > 0 ? `중요: 표준형 패키지의 가격은 반드시 Total Amount인 ${totalAmount.toLocaleString('ko-KR')}원과 정확히 일치해야 합니다!` : '프로젝트 규모에 맞는 적절한 가격으로 설정하세요.'}
+
+가격 설정 시 고려사항:
+${totalAmount > 0 ? `- 표준형 패키지의 가격은 반드시 Total Amount인 ${totalAmount.toLocaleString('ko-KR')}원과 정확히 일치해야 합니다!` : ''}
+- 프로젝트의 기술적 복잡도, 기능 수, 개발 난이도를 종합적으로 분석하여 각 패키지의 적절한 가격을 판단하세요.
+- 기본형은 최소한의 기능만 포함하므로 충분히 저렴하게, 프리미엄형은 고급 기능과 추가 가치를 반영하여 충분히 높게 설정하세요.
+- 각 패키지 간 가격 차이는 프로젝트 특성에 맞게 명확하게 구분되어야 합니다. 가격 차이가 너무 작으면 안 됩니다.
+- 프로젝트 설명, 예상 예산, 추가 요구사항 등을 모두 고려하여 현실적이고 합리적인 가격을 설정하세요.
 
 중요: 프로젝트 설명을 분석하여 적절한 플랫폼 유형을 판단하고, 해당 유형에 맞는 구체적이고 명확한 기능들로 패키지를 구성해주세요.`;
 
@@ -1418,12 +1825,40 @@ ${totalAmount > 0 ? `중요: 표준형 패키지의 가격은 반드시 Total Am
     
     console.log('AI generated package data:', packageData);
     
+    // 패키지 가격 강제 설정
+    if (packageData.packages && packageData.packages.length >= 3) {
     // 표준형 패키지 가격을 totalAmount로 강제 설정
-    if (totalAmount > 0 && packageData.packages && packageData.packages.length >= 2) {
+        if (totalAmount > 0) {
         const standardPackage = packageData.packages.find(pkg => pkg.name.includes('표준형') || pkg.name.includes('표준'));
         if (standardPackage) {
             standardPackage.price = formatAmount(totalAmount);
             console.log(`✅ 표준형 패키지 가격을 Total Amount(${totalAmount.toLocaleString('ko-KR')}원)로 설정했습니다.`);
+            }
+        }
+        
+        // packageBudgets가 있으면 기본형과 프리미엄형도 강제 설정
+        if (packageBudgets) {
+            const basicPackage = packageData.packages.find(pkg => pkg.name.includes('기본형') || pkg.name.includes('기본'));
+            if (basicPackage && packageBudgets.basic) {
+                const basicPrice = parseInt(packageBudgets.basic);
+                if (!isNaN(basicPrice) && basicPrice > 0) {
+                    basicPackage.price = formatAmount(basicPrice);
+                    console.log(`✅ 기본형 패키지 가격을 지정된 가격(${basicPrice.toLocaleString('ko-KR')}원)으로 설정했습니다.`);
+                } else {
+                    console.warn(`⚠️ 기본형 패키지 가격이 유효하지 않습니다: ${packageBudgets.basic}`);
+                }
+            }
+            
+            const premiumPackage = packageData.packages.find(pkg => pkg.name.includes('프리미엄형') || pkg.name.includes('프리미엄'));
+            if (premiumPackage && packageBudgets.premium) {
+                const premiumPrice = parseInt(packageBudgets.premium);
+                if (!isNaN(premiumPrice) && premiumPrice > 0) {
+                    premiumPackage.price = formatAmount(premiumPrice);
+                    console.log(`✅ 프리미엄형 패키지 가격을 지정된 가격(${premiumPrice.toLocaleString('ko-KR')}원)으로 설정했습니다.`);
+                } else {
+                    console.warn(`⚠️ 프리미엄형 패키지 가격이 유효하지 않습니다: ${packageBudgets.premium}`);
+                }
+            }
         }
     }
     
@@ -1531,6 +1966,99 @@ ${uploadedFileContent ? '\n\n참고 파일 내용:\n' + uploadedFileContent : ''
 2. 현재 날짜는 ${currentYear}년 ${currentMonth}월 ${currentDay}일입니다. 모든 일정은 이 날짜 이후로 시작해야 합니다.
 3. 첫 번째 단계는 현재 날짜 이후의 월요일부터 시작하도록 설정해주세요.
 4. ${timeline && timeline !== '협의' ? `전체 개발 기간이 ${timeline}에 맞도록 각 단계의 기간을 조정해주세요.` : ''}`;
+
+    const response = await callOpenAIAPI(apiKey, systemPrompt, userPrompt);
+    return safeJSONParse(response);
+}
+
+// Generate phase-based estimate data using AI
+async function generatePhaseBasedData(apiKey, projectName, projectDescription, budget, timeline, additionalRequirements, aiPrompt, uploadedFileContent) {
+    const systemPrompt = `당신은 견적서 작성 전문가입니다. 주어진 프로젝트 정보를 바탕으로 단계별 개발 비용 견적을 생성해주세요.
+
+규칙:
+1. 정확히 3개의 단계를 생성 (1단계, 2단계, 3단계)
+2. 각 단계는 단계명, 개발 범위(10-15개 항목), 기술 스택(4-6개 항목), 견적, 개발 기간, 우선순위로 구성
+3. 개발 범위는 프로젝트 설명의 구체적인 요구사항을 반영하여 기술적으로 상세하게 작성
+4. 각 개발 범위 항목은 구체적인 기능명, 시스템명을 포함해야 함
+5. 기술 스택은 각 단계에서 사용되는 프로그래밍 언어, 프레임워크, 라이브러리, 도구 등을 구체적으로 명시
+6. 일반적인 내용(예: "프로젝트 요구사항 분석", "기본 구조 설계")보다는 프로젝트 특화된 구체적인 기능과 기술을 명시
+7. 견적은 원화로 단일 금액으로 표시 (예: ₩50,000,000원) - 범위 형식 사용 금지
+8. 개발 기간은 "3~4개월" 형식으로 표시
+9. 우선순위는 각 단계의 중요도와 실행 순서를 고려하여 "1순위", "2순위", "3순위" 형식으로 설정 (프로젝트 특성에 맞게 판단)
+10. 프로젝트 설명을 철저히 분석하여 논리적인 단계로 나누기
+11. 각 단계는 독립적으로 완성 가능한 단위로 구성
+12. 통합 패키지 옵션 3개 생성 (옵션 A, B, C)
+13. 유지보수 섹션: 무상 하자보수, 유지보수 비용(연간), 추가 개발 항목을 포함
+14. 특이사항 섹션: 프로젝트에 특별히 주의해야 할 사항, 제약 조건, 추가 협의 사항 등을 포함
+15. JSON 형식으로 응답
+
+개발 범위 작성 가이드:
+- 프로젝트 설명에 언급된 모든 주요 기능을 개발 범위에 포함
+- 기술 스택, 라이브러리, API, 시스템명을 구체적으로 명시
+- 각 항목은 독립적으로 이해 가능하고 구체적이어야 함
+
+단계 구성 예시:
+- 1단계: AI 모더레이터 솔루션 (1:1 인터뷰)
+- 2단계: 디지털 트윈 (AI 페르소나) 솔루션
+- 3단계: 데이터 통합 검색 솔루션 (LLM 기반)
+
+통합 패키지 구성:
+- 옵션 A: 1단계 + 2단계
+- 옵션 B: 1단계 + 3단계
+- 옵션 C: 전체 (1+2+3단계)
+
+응답 형식:
+{
+  "phases": [
+    {
+      "phaseNumber": 1,
+      "phaseName": "단계명",
+      "developmentScope": ["개발 범위 항목 1", "개발 범위 항목 2", ...],
+      "techStack": ["기술 스택 1", "기술 스택 2", "기술 스택 3", "기술 스택 4"],
+      "estimate": "₩50,000,000원",
+      "period": "2~3개월",
+      "priority": "1순위"
+    },
+    ...
+  ],
+  "packages": [
+    {
+      "name": "옵션 A: [패키지명 A]",
+      "estimate": "₩90,000,000원",
+      "period": "3~4개월"
+    },
+    ...
+  ],
+  "maintenance": {
+    "warranty": "무상 하자보수 내용 (예: 개발 완료 후 6개월간 무상 하자보수 제공)",
+    "annualCost": ["유지보수 비용 항목 1 (예: 연간 유지보수 비용: 총 개발비의 15%)", "유지보수 비용 항목 2"],
+    "additionalDevelopment": ["추가 개발 항목 1 (예: 신규 기능 추가 시 별도 협의)", "추가 개발 항목 2"]
+  },
+  "specialNotes": [
+    "특이사항 1 (예: 외부 API 연동 시 별도 비용 발생 가능)",
+    "특이사항 2 (예: 서버 인프라 비용은 별도 협의)",
+    "특이사항 3 (예: 디자인 수정은 3회까지 무상 제공)"
+  ]
+}`;
+
+    const userPrompt = `프로젝트명: ${projectName}
+프로젝트 설명: ${projectDescription}
+${budget ? `예산: ${budget}` : '예산: 미지정 (프로젝트 규모에 맞게 설정)'}
+${timeline && timeline !== '협의' ? `개발 기간: ${timeline}` : '개발 기간: 협의'}
+추가 요구사항: ${additionalRequirements || '없음'}
+${aiPrompt ? '\n추가 지시사항: ' + aiPrompt : ''}
+${uploadedFileContent ? '\n\n참고 파일 내용:\n' + uploadedFileContent : ''}
+
+위 정보를 바탕으로 단계별 개발 비용 견적을 생성해주세요.
+
+중요:
+- 프로젝트 설명에 명시된 모든 구체적인 기능, 기술, 시스템을 개발 범위에 반영하세요.
+- 각 단계의 개발 범위는 최소 10개 이상, 가능하면 15개까지 상세하게 작성해주세요.
+- 개발 범위 항목은 프로젝트 설명의 구체적인 요구사항을 그대로 반영하여 작성하세요.
+- 예를 들어 프로젝트 설명에 "AI 모더레이터", "STT", "벡터 DB", "RAG" 등이 언급되어 있다면 이를 구체적인 개발 범위 항목으로 작성하세요.
+- 각 항목은 기술적으로 구체적이고 명확하게 작성하세요 (예: "AI 모더레이터 엔진 개발", "실시간 음성 인식 및 텍스트 변환 (STT)").
+- 일반적인 개발 프로세스 항목보다는 프로젝트 특화된 기능과 기술을 우선적으로 포함하세요.
+- 단계명도 프로젝트의 핵심 기능을 반영하여 명확하게 작성하세요 (예: "1단계: AI 모더레이터 솔루션").`;
 
     const response = await callOpenAIAPI(apiKey, systemPrompt, userPrompt);
     return safeJSONParse(response);
@@ -2033,7 +2561,7 @@ function safeJSONParse(text) {
 }
 
 // Common OpenAI API call function
-async function callOpenAIAPI(apiKey, systemPrompt, userPrompt, useJSON = true) {
+async function callOpenAIAPI(apiKey, systemPrompt, userPrompt, useJSON = true, maxTokens = 2000) {
     // Call OpenAI API
     const requestBody = {
         model: 'gpt-4o-mini',
@@ -2048,7 +2576,7 @@ async function callOpenAIAPI(apiKey, systemPrompt, userPrompt, useJSON = true) {
             }
         ],
         temperature: 0.7,
-        max_tokens: 2000
+        max_tokens: maxTokens
     };
     
     // JSON 형식이 필요한 경우에만 response_format 추가
@@ -2177,6 +2705,13 @@ function downloadPDF() {
     const previewArea = document.querySelector('.preview-area');
     const estimateContainer = element ? element.querySelector('.estimate-container') : null;
     
+    // 단계별 견적서인지 확인
+    const isPhaseBased = element && (
+        element.innerHTML.includes('단계별 개발 비용 견적') || 
+        element.querySelector('.estimate-phase-section') !== null ||
+        element.innerHTML.includes('estimate-phase-section')
+    );
+    
     // Check if required elements exist
     if (!element || !previewArea) {
         alert('미리보기 영역을 찾을 수 없습니다.');
@@ -2273,10 +2808,230 @@ function downloadPDF() {
     // document.documentElement.style.border = 'none';
     
     // Get project name for filename
-    const projectName = document.getElementById('projectName')?.value?.trim() || '프로젝트';
+    // 1. 먼저 입력 필드에서 가져오기
+    let projectName = document.getElementById('projectName')?.value?.trim();
+    
+    // 2. 입력 필드에 없으면 생성된 HTML에서 추출
+    if (!projectName && element) {
+        // 프로젝트명 추출 시도 (여러 형식 지원)
+        const projectNameSelectors = [
+            '.estimate-info-value', // 일반 견적서
+            '.estimate-table td', // 테이블 형식
+            '.estimate-phase-title' // 단계별 견적서 (첫 번째 단계명 사용)
+        ];
+        
+        for (const selector of projectNameSelectors) {
+            const elements = element.querySelectorAll(selector);
+            for (const el of elements) {
+                const text = el.textContent?.trim();
+                // "프로젝트명" 라벨 다음에 오는 값 찾기
+                if (text && text.length > 0 && text.length < 100 && !text.includes('원') && !text.includes('일정')) {
+                    // 프로젝트명으로 보이는 값인지 확인
+                    const prevText = el.previousElementSibling?.textContent || '';
+                    const parentText = el.parentElement?.textContent || '';
+                    if (prevText.includes('프로젝트명') || parentText.includes('프로젝트명')) {
+                        projectName = text;
+                        break;
+                    }
+                }
+            }
+            if (projectName) break;
+        }
+        
+        // 단계별 견적서인 경우 첫 번째 단계명에서 추출
+        if (!projectName && isPhaseBased) {
+            const firstPhaseTitle = element.querySelector('.estimate-phase-title');
+            if (firstPhaseTitle) {
+                const phaseText = firstPhaseTitle.textContent?.trim() || '';
+                // "1단계: 단계명" 형식에서 단계명 추출
+                const match = phaseText.match(/\d+단계:\s*(.+)/);
+                if (match && match[1]) {
+                    projectName = match[1].trim();
+                }
+            }
+        }
+    }
+    
+    // 3. 여전히 없으면 기본값 사용
+    if (!projectName) {
+        projectName = '프로젝트';
+    }
+    
+    // 파일명에 사용할 수 없는 문자 제거
+    projectName = projectName.replace(/[<>:"/\\|?*]/g, '_').replace(/\s+/g, '_');
+    
     const filename = `[포너즈] ${projectName}_견적서.pdf`;
     
-    const opt = {
+    // 단계별 견적서는 독립적인 PDF 출력 로직 사용
+    const opt = isPhaseBased ? {
+        margin: [10, 10, 10, 10],
+        filename: filename,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { 
+            scale: 3,
+            useCORS: true,
+            letterRendering: true,
+            scrollX: 0,
+            scrollY: 0,
+            backgroundColor: '#ffffff',
+            logging: false,
+            allowTaint: false,
+            foreignObjectRendering: false,
+            ignoreElements: function(element) {
+                // PDF 다운로드 버튼 제외
+                return element.classList && element.classList.contains('download-btn');
+            },
+            onclone: function(clonedDoc) {
+                // 복제된 문서에서 테이블 스타일 강제 적용
+                const tables = clonedDoc.querySelectorAll('.estimate-table');
+                tables.forEach(table => {
+                    table.style.borderCollapse = 'collapse';
+                    table.style.borderSpacing = '0';
+                    const cells = table.querySelectorAll('td, th');
+                    cells.forEach(cell => {
+                        cell.style.border = '1px solid #ccc';
+                        cell.style.borderCollapse = 'collapse';
+                    });
+                });
+                
+                // estimate-container 스타일 최적화
+                const containers = clonedDoc.querySelectorAll('.estimate-container');
+                containers.forEach(container => {
+                    container.style.width = '100%';
+                    container.style.maxWidth = '100%';
+                    container.style.margin = '0';
+                    container.style.padding = '20px';
+                    container.style.background = '#ffffff';
+                });
+                
+                // 단계별 견적서: "단계별 개발 비용 견적" 제목과 1단계 섹션 사이 간격 최소화
+                const phaseTitles = clonedDoc.querySelectorAll('.estimate-section-title');
+                const firstPhaseSection = clonedDoc.querySelector('.estimate-phase-section');
+                
+                phaseTitles.forEach(title => {
+                    if (title.textContent && title.textContent.includes('단계별 개발 비용 견적')) {
+                        // 제목의 margin-bottom 최소화
+                        title.style.setProperty('margin-bottom', '0', 'important');
+                        title.style.setProperty('padding-bottom', '0', 'important');
+                        title.style.setProperty('page-break-after', 'avoid', 'important');
+                        title.style.setProperty('break-after', 'avoid', 'important');
+                    }
+                });
+                
+                // 모든 단계 섹션에 page-break-inside: auto를 매우 강력하게 적용
+                // styles.css의 page-break-inside: avoid를 덮어쓰기 위해 인라인 스타일로 직접 설정
+                const phaseSections = clonedDoc.querySelectorAll('.estimate-phase-section');
+                
+                // 스타일시트에 직접 CSS 규칙 추가 (매우 강력하게)
+                const styleSheet = clonedDoc.createElement('style');
+                styleSheet.textContent = `
+                    @media print {
+                        .estimate-phase-section {
+                            page-break-inside: auto !important;
+                            break-inside: auto !important;
+                            -webkit-region-break-inside: auto !important;
+                        }
+                        .estimate-phase-section * {
+                            page-break-inside: auto !important;
+                            break-inside: auto !important;
+                            -webkit-region-break-inside: auto !important;
+                        }
+                        .estimate-phase-section:first-of-type {
+                            page-break-before: auto !important;
+                            break-before: auto !important;
+                            margin-top: 0 !important;
+                        }
+                    }
+                    .estimate-phase-section {
+                        page-break-inside: auto !important;
+                        break-inside: auto !important;
+                        -webkit-region-break-inside: auto !important;
+                    }
+                    .estimate-phase-section * {
+                        page-break-inside: auto !important;
+                        break-inside: auto !important;
+                        -webkit-region-break-inside: auto !important;
+                    }
+                    .estimate-phase-section:first-of-type {
+                        page-break-before: auto !important;
+                        break-before: auto !important;
+                        margin-top: 0 !important;
+                    }
+                `;
+                clonedDoc.head.appendChild(styleSheet);
+                
+                phaseSections.forEach((section, index) => {
+                    // 기존 인라인 스타일 가져오기
+                    let currentStyle = section.getAttribute('style') || '';
+                    
+                    // page-break-inside: auto를 인라인 스타일로 직접 추가 (가장 강력한 방법)
+                    if (!currentStyle.includes('page-break-inside')) {
+                        currentStyle += '; page-break-inside: auto !important; break-inside: auto !important;';
+                    } else {
+                        // 기존 page-break-inside를 auto로 교체
+                        currentStyle = currentStyle.replace(/page-break-inside:\s*[^;]+/gi, 'page-break-inside: auto !important');
+                        currentStyle = currentStyle.replace(/break-inside:\s*[^;]+/gi, 'break-inside: auto !important');
+                        if (!currentStyle.includes('page-break-inside: auto')) {
+                            currentStyle += '; page-break-inside: auto !important; break-inside: auto !important;';
+                        }
+                    }
+                    section.setAttribute('style', currentStyle);
+                    
+                    // setProperty로도 추가 적용
+                    section.style.setProperty('page-break-inside', 'auto', 'important');
+                    section.style.setProperty('break-inside', 'auto', 'important');
+                    
+                    // 첫 번째 단계 섹션 추가 처리
+                    if (index === 0) {
+                        let firstStyle = section.getAttribute('style') || '';
+                        firstStyle += '; margin-top: 0 !important; padding-top: 5px !important; page-break-before: auto !important; break-before: auto !important;';
+                        section.setAttribute('style', firstStyle);
+                        section.style.setProperty('margin-top', '0', 'important');
+                        section.style.setProperty('padding-top', '5px', 'important');
+                        section.style.setProperty('page-break-before', 'auto', 'important');
+                        section.style.setProperty('break-before', 'auto', 'important');
+                        section.classList.add('first-phase-section');
+                    }
+                    
+                    // 모든 하위 요소에도 page-break-inside: auto 강제 적용
+                    const children = section.querySelectorAll('*');
+                    children.forEach(child => {
+                        let childStyle = child.getAttribute('style') || '';
+                        // 기존 page-break-inside 제거 후 auto로 설정
+                        childStyle = childStyle.replace(/page-break-inside:\s*[^;!]+[!important]*/gi, '');
+                        childStyle = childStyle.replace(/break-inside:\s*[^;!]+[!important]*/gi, '');
+                        childStyle += '; page-break-inside: auto !important; break-inside: auto !important;';
+                        child.setAttribute('style', childStyle);
+                        child.style.setProperty('page-break-inside', 'auto', 'important');
+                        child.style.setProperty('break-inside', 'auto', 'important');
+                    });
+                });
+                
+                // html2pdf.js가 CSS를 무시할 수 있으므로, 모든 방법으로 강제 적용
+                phaseSections.forEach((section, index) => {
+                    // data 속성으로도 표시
+                    section.setAttribute('data-page-break-inside', 'auto');
+                    if (index === 0) {
+                        section.setAttribute('data-page-break-before', 'auto');
+                    }
+                    
+                    // 최종적으로 인라인 스타일로 직접 설정 (가장 강력)
+                    let finalStyle = section.getAttribute('style') || '';
+                    // 기존 page-break 관련 스타일 제거
+                    finalStyle = finalStyle.replace(/page-break-inside[^;]*/gi, '').replace(/break-inside[^;]*/gi, '');
+                    // auto로 강제 설정
+                    finalStyle += ' page-break-inside: auto !important; break-inside: auto !important;';
+                    section.setAttribute('style', finalStyle);
+                });
+            }
+        },
+        jsPDF: { 
+            unit: 'mm', 
+            format: 'a4', 
+            orientation: 'portrait',
+            compress: true
+        },
+    } : {
         margin: 0,
         filename: filename,
         image: { type: 'jpeg', quality: 1.0 },
@@ -3010,6 +3765,372 @@ function initializeCodeEditor() {
         }, 100);
     }
 }
+
+// AI 채팅 기능
+let chatHistory = [];
+
+// 채팅 모달 토글
+function toggleChat() {
+    const chatModal = document.getElementById('chatModal');
+    if (chatModal) {
+        chatModal.classList.toggle('active');
+        if (chatModal.classList.contains('active')) {
+            // 채팅 모달이 열릴 때 입력창에 포커스
+            setTimeout(() => {
+                const chatInput = document.getElementById('chatInput');
+                if (chatInput) {
+                    chatInput.focus();
+                }
+            }, 100);
+        } else {
+            // 채팅 모달이 닫힐 때 히스토리 초기화하지 않음 (유지)
+        }
+    }
+}
+
+// 채팅 메시지 전송
+async function sendChatMessage() {
+    const chatInput = document.getElementById('chatInput');
+    const chatMessages = document.getElementById('chatMessages');
+    
+    if (!chatInput || !chatMessages) return;
+    
+    const message = chatInput.value.trim();
+    if (!message) return;
+    
+    // 현재 견적서가 없으면 경고
+    if (!currentHtmlCode || currentHtmlCode.trim() === '') {
+        addChatMessage('bot', '먼저 견적서를 생성해주세요. 견적서가 생성된 후에 수정 요청을 할 수 있습니다.');
+        return;
+    }
+    
+    // 사용자 메시지 추가
+    addChatMessage('user', message);
+    chatInput.value = '';
+    
+    // 로딩 메시지 추가
+    const loadingId = addChatMessage('bot', '수정 중입니다...', true);
+    
+    try {
+        // 채팅 히스토리에 사용자 메시지 추가
+        chatHistory.push({ role: 'user', content: message });
+        
+        // AI를 통해 견적서 수정 (히스토리 포함)
+        const modifiedHtml = await modifyEstimateWithAI(message, currentHtmlCode, chatHistory);
+        
+        // 로딩 메시지 제거
+        removeChatMessage(loadingId);
+        
+        if (modifiedHtml) {
+            // 견적서 업데이트
+            currentHtmlCode = modifiedHtml;
+            updatePreviewFromCode(modifiedHtml);
+            
+            // 코드 에디터 업데이트
+            if (codeEditor) {
+                codeEditor.setValue(modifiedHtml);
+            } else {
+                const htmlCodeEditor = document.getElementById('htmlCodeEditor');
+                if (htmlCodeEditor) {
+                    htmlCodeEditor.value = modifiedHtml;
+                }
+            }
+            
+            // 채팅 히스토리에 AI 응답 추가
+            chatHistory.push({ role: 'assistant', content: '견적서가 성공적으로 수정되었습니다.' });
+            
+            addChatMessage('bot', '견적서가 성공적으로 수정되었습니다! 미리보기를 확인해주세요.');
+        } else {
+            addChatMessage('bot', '수정에 실패했습니다. 다시 시도해주세요.');
+        }
+    } catch (error) {
+        console.error('채팅 오류:', error);
+        removeChatMessage(loadingId);
+        addChatMessage('bot', `오류가 발생했습니다: ${error.message}`);
+    }
+}
+
+// 채팅 메시지 추가
+function addChatMessage(sender, content, isLoading = false) {
+    const chatMessages = document.getElementById('chatMessages');
+    if (!chatMessages) return null;
+    
+    const messageId = 'msg-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+    const messageDiv = document.createElement('div');
+    messageDiv.id = messageId;
+    messageDiv.className = `chat-message ${sender} ${isLoading ? 'loading' : ''}`;
+    
+    const contentDiv = document.createElement('div');
+    contentDiv.className = 'message-content';
+    contentDiv.innerHTML = content.replace(/\n/g, '<br>');
+    
+    messageDiv.appendChild(contentDiv);
+    chatMessages.appendChild(messageDiv);
+    
+    // 스크롤을 맨 아래로
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+    
+    return messageId;
+}
+
+// 채팅 메시지 제거
+function removeChatMessage(messageId) {
+    const message = document.getElementById(messageId);
+    if (message) {
+        message.remove();
+    }
+}
+
+// AI를 통한 견적서 수정
+async function modifyEstimateWithAI(userRequest, currentHtml, history = []) {
+    const apiKey = window.CONFIG?.OPENAI_API_KEY;
+    if (!apiKey) {
+        throw new Error('OpenAI API 키가 설정되지 않았습니다.');
+    }
+    
+    // 특정 패키지 수정 요청인지 확인
+    const lowerRequest = userRequest.toLowerCase();
+    const isPackageSpecific = lowerRequest.includes('기본형') || lowerRequest.includes('표준형') || lowerRequest.includes('프리미엄형') || 
+                              lowerRequest.includes('기본') || lowerRequest.includes('표준') || lowerRequest.includes('프리미엄');
+    
+    // 특정 패키지만 수정하는 경우
+    if (isPackageSpecific) {
+        try {
+            return await updateSpecificPackage(userRequest, currentHtml, history);
+        } catch (error) {
+            console.log('특정 패키지 수정 실패, 전체 수정으로 전환:', error);
+        }
+    }
+    
+    // 복잡한 수정은 AI를 통해 처리 (히스토리 포함)
+    const systemPrompt = `당신은 견적서 수정 전문가입니다. 사용자의 요청에 따라 현재 견적서의 특정 부분만 수정해주세요.
+
+중요 규칙:
+1. 사용자가 요청한 부분만 정확히 수정하세요
+2. 나머지 부분은 그대로 유지하세요
+3. HTML 구조와 스타일을 보존하세요
+4. 수정된 전체 HTML을 반환하세요
+5. JSON 형식이 아닌 순수 HTML만 반환하세요
+6. 응답은 가능한 한 간결하게, HTML만 반환하세요
+7. 이전 대화 맥락을 고려하여 사용자의 의도를 파악하세요
+8. "이번엔", "이제", "다시" 같은 표현은 이전 대화를 참조하는 것입니다
+
+수정 가능한 항목:
+- 프로젝트명
+- 프로젝트 설명/개요
+- 클라이언트명
+- 금액/가격 (특정 패키지만 수정 가능)
+- 개발 기간/일정
+- 기능 목록
+- 패키지 옵션
+- 개발 단계/일정
+- 기타 견적서 내용
+
+패키지 수정 시:
+- "기본형만", "기본형 패키지만" 등으로 특정 패키지만 수정
+- "프리미엄 가격이 너무 높아" 후 "이번엔 너무 낮아"는 프리미엄 가격을 의미
+
+응답 형식:
+수정된 전체 HTML 코드만 반환하세요. 설명이나 JSON 없이 HTML만 반환합니다.`;
+
+    // 이전 대화 맥락 포함
+    let contextPrompt = '';
+    if (history.length > 0) {
+        const recentHistory = history.slice(-4); // 최근 4개 메시지만 포함
+        contextPrompt = `이전 대화 맥락:\n${recentHistory.map(msg => `${msg.role === 'user' ? '사용자' : 'AI'}: ${msg.content}`).join('\n')}\n\n`;
+    }
+    
+    // 현재 HTML을 간단히 요약하여 전달 (전체 HTML 대신)
+    const userPrompt = `${contextPrompt}현재 견적서의 주요 내용:
+${extractKeyInfo(currentHtml)}
+
+사용자 요청:
+${userRequest}
+
+위 요청에 따라 견적서를 수정해주세요. 수정된 전체 HTML 코드만 반환하세요.`;
+
+    try {
+        // HTML 응답이므로 더 큰 max_tokens 사용하되, 더 빠른 모델 사용
+        const response = await callOpenAIAPI(apiKey, systemPrompt, userPrompt, false, 4000);
+        
+        // HTML 추출 (마크다운 코드 블록 제거)
+        let html = response.trim();
+        
+        // 마크다운 코드 블록 제거
+        html = html.replace(/```html\n?/g, '');
+        html = html.replace(/```\n?/g, '');
+        html = html.trim();
+        
+        // HTML이 유효한지 확인
+        if (!html.includes('<div') && !html.includes('<table')) {
+            // HTML 태그가 없으면 현재 HTML의 구조를 유지하면서 내용만 수정
+            return modifyHtmlContent(currentHtml, userRequest, response);
+        }
+        
+        return html;
+    } catch (error) {
+        console.error('AI 수정 오류:', error);
+        throw error;
+    }
+}
+
+// 특정 패키지만 수정
+async function updateSpecificPackage(userRequest, currentHtml, history = []) {
+    const apiKey = window.CONFIG?.OPENAI_API_KEY;
+    if (!apiKey) {
+        throw new Error('OpenAI API 키가 설정되지 않았습니다.');
+    }
+    
+    const lowerRequest = userRequest.toLowerCase();
+    
+    // 어떤 패키지인지 확인
+    let targetPackage = null;
+    if (lowerRequest.includes('기본형') || lowerRequest.includes('기본')) {
+        targetPackage = 'basic';
+    } else if (lowerRequest.includes('표준형') || lowerRequest.includes('표준')) {
+        targetPackage = 'standard';
+    } else if (lowerRequest.includes('프리미엄형') || lowerRequest.includes('프리미엄')) {
+        targetPackage = 'premium';
+    } else if (history.length > 0) {
+        // 이전 대화에서 패키지 정보 추출
+        const lastUserMessage = history.filter(h => h.role === 'user').pop()?.content || '';
+        const lastLower = lastUserMessage.toLowerCase();
+        if (lastLower.includes('프리미엄')) {
+            targetPackage = 'premium';
+        } else if (lastLower.includes('기본')) {
+            targetPackage = 'basic';
+        } else if (lastLower.includes('표준')) {
+            targetPackage = 'standard';
+        }
+    }
+    
+    if (!targetPackage) {
+        throw new Error('수정할 패키지를 확인할 수 없습니다.');
+    }
+    
+    const systemPrompt = `당신은 견적서 수정 전문가입니다. 사용자의 요청에 따라 특정 패키지의 가격만 수정해주세요.
+
+중요 규칙:
+1. ${targetPackage === 'basic' ? '기본형' : targetPackage === 'standard' ? '표준형' : '프리미엄형'} 패키지의 가격만 수정하세요
+2. 다른 패키지나 견적서의 다른 부분은 절대 수정하지 마세요
+3. HTML 구조와 스타일을 보존하세요
+4. 수정된 전체 HTML을 반환하세요
+5. JSON 형식이 아닌 순수 HTML만 반환하세요
+
+패키지 선택자:
+- 기본형: .estimate-package-section 내에서 "기본형 패키지" 텍스트가 있는 섹션
+- 표준형: .estimate-package-section 내에서 "표준형 패키지" 텍스트가 있는 섹션
+- 프리미엄형: .estimate-package-section 내에서 "프리미엄형 패키지" 텍스트가 있는 섹션
+
+응답 형식:
+수정된 전체 HTML 코드만 반환하세요. 설명이나 JSON 없이 HTML만 반환합니다.`;
+    
+    // 이전 대화 맥락 포함
+    let contextPrompt = '';
+    if (history.length > 0) {
+        const recentHistory = history.slice(-4);
+        contextPrompt = `이전 대화 맥락:\n${recentHistory.map(msg => `${msg.role === 'user' ? '사용자' : 'AI'}: ${msg.content}`).join('\n')}\n\n`;
+    }
+    
+    const userPrompt = `${contextPrompt}현재 견적서 HTML:
+${currentHtml}
+
+사용자 요청:
+${userRequest}
+
+위 요청에 따라 ${targetPackage === 'basic' ? '기본형' : targetPackage === 'standard' ? '표준형' : '프리미엄형'} 패키지의 가격만 수정해주세요. 다른 부분은 절대 수정하지 마세요. 수정된 전체 HTML 코드만 반환하세요.`;
+    
+    try {
+        const response = await callOpenAIAPI(apiKey, systemPrompt, userPrompt, false, 4000);
+        
+        let html = response.trim();
+        html = html.replace(/```html\n?/g, '');
+        html = html.replace(/```\n?/g, '');
+        html = html.trim();
+        
+        if (!html.includes('<div') && !html.includes('<table')) {
+            return modifyHtmlContent(currentHtml, userRequest, response);
+        }
+        
+        return html;
+    } catch (error) {
+        console.error('특정 패키지 수정 오류:', error);
+        throw error;
+    }
+}
+
+// 주요 정보만 추출 (컨텍스트 크기 줄이기)
+function extractKeyInfo(html) {
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = html;
+    
+    const info = {
+        projectName: tempDiv.querySelector('.estimate-info-value')?.textContent || '',
+        totalAmount: tempDiv.querySelector('.estimate-summary-total span:last-child')?.textContent || '',
+        items: Array.from(tempDiv.querySelectorAll('.estimate-table tbody tr')).slice(0, 5).map(tr => {
+            const cells = tr.querySelectorAll('td');
+            return cells.length >= 3 ? `${cells[0].textContent}: ${cells[2].textContent}` : '';
+        }).filter(Boolean).join(', ')
+    };
+    
+    return `프로젝트명: ${info.projectName}\n총액: ${info.totalAmount}\n주요 항목: ${info.items}`;
+}
+
+// HTML 내용 수정 헬퍼 함수
+function modifyHtmlContent(originalHtml, userRequest, aiResponse) {
+    // AI 응답에서 수정할 내용 추출
+    // 간단한 패턴 매칭으로 수정
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = originalHtml;
+    
+    // 사용자 요청 분석
+    const lowerRequest = userRequest.toLowerCase();
+    
+    // 프로젝트명 수정
+    if (lowerRequest.includes('프로젝트명') || lowerRequest.includes('프로젝트 이름')) {
+        const nameMatch = aiResponse.match(/프로젝트명[:\s]*([^\n<]+)/i) || 
+                         userRequest.match(/프로젝트명[:\s]*([^\n]+)/i);
+        if (nameMatch) {
+            const newName = nameMatch[1].trim();
+            originalHtml = originalHtml.replace(
+                /<div[^>]*class="[^"]*info-value[^"]*"[^>]*>([^<]*프로젝트명[^<]*)<\/div>/i,
+                `<div class="info-value">${newName}</div>`
+            );
+        }
+    }
+    
+    // 가격 수정
+    if (lowerRequest.includes('가격') || lowerRequest.includes('금액') || lowerRequest.includes('비용')) {
+        const priceMatch = aiResponse.match(/(\d{1,3}(?:,\d{3})*(?:,\d{3})*)\s*원/g) || 
+                          userRequest.match(/(\d{1,3}(?:,\d{3})*(?:,\d{3})*)\s*원/g);
+        if (priceMatch) {
+            const newPrice = priceMatch[0];
+            // 가격 관련 부분 수정
+            originalHtml = originalHtml.replace(
+                /(\d{1,3}(?:,\d{3})*(?:,\d{3})*)\s*원/g,
+                newPrice
+            );
+        }
+    }
+    
+    // 더 정교한 수정을 위해 AI 응답을 파싱하여 적용
+    // 여기서는 간단한 버전만 구현하고, 실제로는 AI가 전체 HTML을 반환하도록 함
+    
+    return originalHtml;
+}
+
+// Enter 키로 메시지 전송
+document.addEventListener('DOMContentLoaded', function() {
+    const chatInput = document.getElementById('chatInput');
+    if (chatInput) {
+        chatInput.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendChatMessage();
+            }
+        });
+    }
+});
 
 // Initialize
 document.addEventListener('DOMContentLoaded', function() {
