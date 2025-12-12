@@ -970,12 +970,20 @@ async function generateEstimateWithPartialReplacement(apiKey, projectName, proje
     
     // Replace maintenance section (유지보수 및 지원)
     // 기본 견적서와 상세 견적서 모두 처리
-    const maintenanceContent = `
+    // 상세 견적서인지 확인 (templateFileName에 "상세견적서"가 포함되어 있거나 HTML에 "6. 유지보수 및 지원"이 있는 경우)
+    const isDetailedTemplate = templateFileName.includes('상세견적서') || templateHtml.includes('6. 유지보수 및 지원');
+    
+    let maintenanceContent = `
             <li>무상 하자보수: 개발 완료 후 계약기간만큼</li>
-            <li>긴급 지원: 24시간 이내 대응</li>
+            <li>긴급 지원: 24시간 이내 응대</li>
             <li>시스템 모니터링: 서버 및 성능 모니터링, 장애 대응</li>
-            <li>오류 수정: 시스템 오류 및 버그 수정</li>
+            <li>오류 수정: 시스템 오류 수정 및 개선</li>`;
+    
+    // 상세 견적서가 아닌 경우에만 "안정화 지원" 항목 추가
+    if (!isDetailedTemplate) {
+        maintenanceContent += `
             <li>안정화 지원: 시스템 안정성 점검 및 안정화 지원</li>`;
+    }
     
     // 기본 견적서: "유지보수 및 지원", 상세 견적서: "6. 유지보수 및 지원"
     const maintenanceRegex = /<div class="estimate-section-title">(?:6\.\s*)?유지보수 및 지원<\/div>[\s\S]*?<ul class="estimate-package-features">[\s\S]*?<\/ul>/g;
@@ -1078,35 +1086,12 @@ function replacePhaseBasedEstimate(html, phaseBasedData) {
 
         // 개발 범위 리스트 교체 - 각 단계별로 정확하게 매칭
         const scopePattern = new RegExp(
-            `(${phaseNumber}단계: [^<]+</div>[\\s\\S]*?<strong>개발 범위:</strong>[\\s\\S]*?<ul class="estimate-option-list">)([\\s\\S]*?)(</ul>[\\s\\S]*?<div style="margin: 15px 0;">[\\s\\S]*?<strong>기술 스택:</strong>)`,
+            `(${phaseNumber}단계: [^<]+</div>[\\s\\S]*?<strong>개발 범위:</strong>[\\s\\S]*?<ul class="estimate-option-list">)([\\s\\S]*?)(</ul>[\\s\\S]*?<div class="estimate-phase-footer">)`,
             'g'
         );
         
         html = html.replace(scopePattern, (match, before, oldList, after) => {
             return before + '\n' + scopeList + '                ' + after;
-        });
-
-        // 기술 스택 리스트 생성
-        let techStackList = '';
-        if (phase.techStack && Array.isArray(phase.techStack)) {
-            phase.techStack.forEach((item) => {
-                techStackList += `                    <li>${item}</li>\n`;
-            });
-        } else {
-            // 기본 항목
-            for (let i = 1; i <= 4; i++) {
-                techStackList += `                    <li>[${phaseNumber}단계 기술 스택 ${i}]</li>\n`;
-            }
-        }
-
-        // 기술 스택 리스트 교체 - 각 단계별로 정확하게 매칭
-        const techStackPattern = new RegExp(
-            `(${phaseNumber}단계: [^<]+</div>[\\s\\S]*?<strong>기술 스택:</strong>[\\s\\S]*?<ul class="estimate-option-list">)([\\s\\S]*?)(</ul>[\\s\\S]*?<div class="estimate-phase-footer">)`,
-            'g'
-        );
-        
-        html = html.replace(techStackPattern, (match, before, oldList, after) => {
-            return before + '\n' + techStackList + '                ' + after;
         });
 
         // 견적 교체
@@ -1182,44 +1167,25 @@ function replacePhaseBasedEstimate(html, phaseBasedData) {
         });
     }
 
-    // 유지보수 섹션 교체
-    if (phaseBasedData.maintenance) {
-        const maintenance = phaseBasedData.maintenance;
-        
-        // 무상 하자보수
-        if (maintenance.warranty) {
-            html = html.replace(
-                /<li>\[무상 하자보수 내용\]<\/li>/g,
-                `<li>${maintenance.warranty}</li>`
-            );
-        }
-        
-        // 유지보수 비용
-        if (maintenance.annualCost && Array.isArray(maintenance.annualCost)) {
-            let annualCostList = '';
-            maintenance.annualCost.forEach((item) => {
-                annualCostList += `                <li>${item}</li>\n`;
-            });
-            const annualCostPattern = new RegExp(
-                '(<strong>유지보수 비용 \\(연간\\):</strong>\\s*<ul class="estimate-package-features">)([\\s\\S]*?)(</ul>)',
-                'g'
-            );
-            html = html.replace(annualCostPattern, `$1\n${annualCostList}            $3`);
-        }
-        
-        // 추가 개발
-        if (maintenance.additionalDevelopment && Array.isArray(maintenance.additionalDevelopment)) {
-            let additionalDevList = '';
-            maintenance.additionalDevelopment.forEach((item) => {
-                additionalDevList += `                <li>${item}</li>\n`;
-            });
-            const additionalDevPattern = new RegExp(
-                '(<strong>추가 개발:</strong>\\s*<ul class="estimate-package-features">)([\\s\\S]*?)(</ul>)',
-                'g'
-            );
-            html = html.replace(additionalDevPattern, `$1\n${additionalDevList}            $3`);
-        }
-    }
+    // 유지보수 섹션 교체 - 다른 견적서와 동일한 형식으로 변경
+    // 단계별 견적서는 "유지보수 및 지원" 형식으로 통일 (유지보수 비용 제외)
+    const maintenanceContent = `
+            <li>무상 하자보수: 개발 완료 후 계약 기간 동안</li>
+            <li>긴급 지원: 24시간 이내 초기 대응</li>
+            <li>시스템 모니터링: 서버 및 성능 모니터링, 장애 감지 및 대응</li>
+            <li>버그 수정 및 시스템 개선: 시스템 버그 수정, 안정성 점검 및 개선 지원</li>`;
+    
+    // 단계별 견적서의 유지보수 섹션 교체
+    const phaseMaintenanceRegex = /<div class="estimate-section-title">유지보수(?: 및 지원)?<\/div>[\s\S]*?<ul class="estimate-package-features">[\s\S]*?<\/ul>/g;
+    html = html.replace(phaseMaintenanceRegex, (match) => {
+        return match.replace(/<ul class="estimate-package-features">[\s\S]*?<\/ul>/g, `<ul class="estimate-package-features">${maintenanceContent}
+        </ul>`);
+    });
+    
+    // 기존 유지보수 섹션의 하위 항목들 제거 (무상 하자보수, 유지보수 비용, 추가 개발)
+    html = html.replace(/<div style="margin: 15px 0;">\s*<strong>무상 하자보수:<\/strong>[\s\S]*?<\/ul>\s*<\/div>/g, '');
+    html = html.replace(/<div style="margin: 15px 0;">\s*<strong>유지보수 비용 \(연간\):<\/strong>[\s\S]*?<\/ul>\s*<\/div>/g, '');
+    html = html.replace(/<div style="margin: 15px 0;">\s*<strong>추가 개발:<\/strong>[\s\S]*?<\/ul>\s*<\/div>/g, '');
 
     // 특이사항 섹션 교체
     if (phaseBasedData.specialNotes && Array.isArray(phaseBasedData.specialNotes)) {
@@ -1757,16 +1723,21 @@ async function generatePackageData(apiKey, projectName, projectDescription, clie
 
     const systemPrompt = `당신은 견적서 작성 전문가입니다. 주어진 프로젝트 정보를 바탕으로 3개의 패키지 옵션을 생성해주세요.
 
-중요 규칙:
+중요 규칙 (반드시 준수):
 1. 기본형, 표준형, 프리미엄형 3개 패키지
-2. 기본형: 5개 기능 (기본적인 기능만)
-3. 표준형: 7개 기능 (기본형 + 고급 기능 2개 추가)
-4. 프리미엄형: 9개 기능 (표준형 + 프리미엄 기능 2개 추가)
+2. 기본형: 반드시 정확히 5개 기능만 포함 (기본적인 기능만)
+3. 표준형: 반드시 정확히 7개 기능만 포함 (기본형의 5개 기능 + 고급 기능 2개 추가)
+4. 프리미엄형: 반드시 정확히 9개 기능만 포함 (표준형의 7개 기능 + 프리미엄 기능 2개 추가)
 5. 각 패키지는 서로 다른 수준의 기능을 제공해야 함 (중복 최소화)
 6. 가격은 반드시 기본형 < 표준형 < 프리미엄형 순으로 설정
 7. 프로젝트 설명을 분석하여 적절한 플랫폼 유형을 판단하세요 (웹사이트, 모바일앱, 데스크톱앱, AI시스템 등)
 8. 기능 설명은 프로젝트 유형에 맞게 구체적이고 명확하게 작성하세요
 9. JSON 형식으로 응답
+
+CRITICAL: 기능 개수는 절대적으로 준수해야 합니다!
+- 기본형: 정확히 5개 (5개가 아니면 안 됩니다)
+- 표준형: 정확히 7개 (7개가 아니면 안 됩니다)
+- 프리미엄형: 정확히 9개 (9개가 아니면 안 됩니다)
 
 가격 설정 규칙 (매우 중요):
 ${packageBudgets && packageBudgets.basic && !isNaN(parseInt(packageBudgets.basic)) ? `- 기본형: ${parseInt(packageBudgets.basic).toLocaleString('ko-KR')}원 (지정된 가격)` : totalAmount > 0 ? `- 기본형: 프로젝트의 복잡도, 기능 수, 기술 난이도, 개발 기간 등을 종합적으로 분석하여 적절한 가격을 설정하세요. 표준형(Total Amount) 대비 기본형은 프로젝트 특성에 따라 25-50% 수준으로 설정하되, 기본적인 기능만 포함하므로 충분히 저렴한 가격이어야 합니다.` : `- 기본형: 프로젝트 복잡도, 기능 수, 기술 난이도 등을 분석하여 적절한 기본 가격을 설정하세요.`}
@@ -1810,6 +1781,11 @@ ${uploadedFileContent ? '\n\n참고 파일 내용:\n' + uploadedFileContent : ''
 
 위 정보를 바탕으로 3개의 패키지 옵션을 생성해주세요. 
 
+기능 개수 규칙 (절대적으로 준수):
+- 기본형 패키지: 반드시 정확히 5개의 기능만 포함 (5개가 아니면 안 됩니다)
+- 표준형 패키지: 반드시 정확히 7개의 기능만 포함 (7개가 아니면 안 됩니다)
+- 프리미엄형 패키지: 반드시 정확히 9개의 기능만 포함 (9개가 아니면 안 됩니다)
+
 가격 설정 시 고려사항:
 ${totalAmount > 0 ? `- 표준형 패키지의 가격은 반드시 Total Amount인 ${totalAmount.toLocaleString('ko-KR')}원과 정확히 일치해야 합니다!` : ''}
 - 프로젝트의 기술적 복잡도, 기능 수, 개발 난이도를 종합적으로 분석하여 각 패키지의 적절한 가격을 판단하세요.
@@ -1817,13 +1793,64 @@ ${totalAmount > 0 ? `- 표준형 패키지의 가격은 반드시 Total Amount�
 - 각 패키지 간 가격 차이는 프로젝트 특성에 맞게 명확하게 구분되어야 합니다. 가격 차이가 너무 작으면 안 됩니다.
 - 프로젝트 설명, 예상 예산, 추가 요구사항 등을 모두 고려하여 현실적이고 합리적인 가격을 설정하세요.
 
-중요: 프로젝트 설명을 분석하여 적절한 플랫폼 유형을 판단하고, 해당 유형에 맞는 구체적이고 명확한 기능들로 패키지를 구성해주세요.`;
+중요: 프로젝트 설명을 분석하여 적절한 플랫폼 유형을 판단하고, 해당 유형에 맞는 구체적이고 명확한 기능들로 패키지를 구성해주세요.
+반드시 각 패키지의 기능 개수를 정확히 준수하세요!`;
 
     // Generate package data using AI (including prices and features)
     const response = await callOpenAIAPI(apiKey, systemPrompt, userPrompt);
     const packageData = safeJSONParse(response);
     
     console.log('AI generated package data:', packageData);
+    
+    // 패키지 기능 개수 검증 및 보정
+    if (packageData.packages && packageData.packages.length >= 3) {
+        const expectedCounts = { basic: 5, standard: 7, premium: 9 };
+        
+        packageData.packages.forEach((pkg, index) => {
+            const pkgName = pkg.name || '';
+            let expectedCount = 0;
+            
+            if (pkgName.includes('기본형') || pkgName.includes('기본')) {
+                expectedCount = expectedCounts.basic;
+            } else if (pkgName.includes('표준형') || pkgName.includes('표준')) {
+                expectedCount = expectedCounts.standard;
+            } else if (pkgName.includes('프리미엄형') || pkgName.includes('프리미엄')) {
+                expectedCount = expectedCounts.premium;
+            } else {
+                // 순서로 판단 (첫 번째: 기본형, 두 번째: 표준형, 세 번째: 프리미엄형)
+                if (index === 0) expectedCount = expectedCounts.basic;
+                else if (index === 1) expectedCount = expectedCounts.standard;
+                else if (index === 2) expectedCount = expectedCounts.premium;
+            }
+            
+            const actualCount = pkg.features ? pkg.features.length : 0;
+            
+            if (expectedCount > 0 && actualCount !== expectedCount) {
+                console.warn(`⚠️ ${pkgName} 패키지의 기능 개수가 올바르지 않습니다. 예상: ${expectedCount}개, 실제: ${actualCount}개`);
+                
+                // 기능 개수 보정
+                if (actualCount < expectedCount) {
+                    // 부족한 경우 기본 기능 추가
+                    const additionalFeatures = [];
+                    for (let i = actualCount; i < expectedCount; i++) {
+                        if (pkgName.includes('기본형')) {
+                            additionalFeatures.push(`기본 기능 ${i + 1}`);
+                        } else if (pkgName.includes('표준형')) {
+                            additionalFeatures.push(`고급 기능 ${i - actualCount + 1}`);
+                        } else if (pkgName.includes('프리미엄형')) {
+                            additionalFeatures.push(`프리미엄 기능 ${i - actualCount + 1}`);
+                        }
+                    }
+                    pkg.features = [...(pkg.features || []), ...additionalFeatures];
+                    console.log(`✅ ${pkgName} 패키지에 ${additionalFeatures.length}개 기능을 추가했습니다.`);
+                } else if (actualCount > expectedCount) {
+                    // 초과한 경우 뒤에서 제거
+                    pkg.features = pkg.features.slice(0, expectedCount);
+                    console.log(`✅ ${pkgName} 패키지에서 ${actualCount - expectedCount}개 기능을 제거했습니다.`);
+                }
+            }
+        });
+    }
     
     // 패키지 가격 강제 설정
     if (packageData.packages && packageData.packages.length >= 3) {
@@ -1988,7 +2015,7 @@ async function generatePhaseBasedData(apiKey, projectName, projectDescription, b
 10. 프로젝트 설명을 철저히 분석하여 논리적인 단계로 나누기
 11. 각 단계는 독립적으로 완성 가능한 단위로 구성
 12. 통합 패키지 옵션 3개 생성 (옵션 A, B, C)
-13. 유지보수 섹션: 무상 하자보수, 유지보수 비용(연간), 추가 개발 항목을 포함
+13. 유지보수 섹션: 무상 하자보수, 긴급 지원, 시스템 모니터링, 버그 수정 및 시스템 개선 항목을 포함 (유지보수 비용은 제외)
 14. 특이사항 섹션: 프로젝트에 특별히 주의해야 할 사항, 제약 조건, 추가 협의 사항 등을 포함
 15. JSON 형식으로 응답
 
@@ -2014,7 +2041,6 @@ async function generatePhaseBasedData(apiKey, projectName, projectDescription, b
       "phaseNumber": 1,
       "phaseName": "단계명",
       "developmentScope": ["개발 범위 항목 1", "개발 범위 항목 2", ...],
-      "techStack": ["기술 스택 1", "기술 스택 2", "기술 스택 3", "기술 스택 4"],
       "estimate": "₩50,000,000원",
       "period": "2~3개월",
       "priority": "1순위"
@@ -2031,8 +2057,8 @@ async function generatePhaseBasedData(apiKey, projectName, projectDescription, b
   ],
   "maintenance": {
     "warranty": "무상 하자보수 내용 (예: 개발 완료 후 6개월간 무상 하자보수 제공)",
-    "annualCost": ["유지보수 비용 항목 1 (예: 연간 유지보수 비용: 총 개발비의 15%)", "유지보수 비용 항목 2"],
-    "additionalDevelopment": ["추가 개발 항목 1 (예: 신규 기능 추가 시 별도 협의)", "추가 개발 항목 2"]
+    "annualCost": [],
+    "additionalDevelopment": []
   },
   "specialNotes": [
     "특이사항 1 (예: 외부 API 연동 시 별도 비용 발생 가능)",
@@ -2813,32 +2839,32 @@ function downloadPDF() {
     
     // 2. 입력 필드에 없으면 생성된 HTML에서 추출
     if (!projectName && element) {
-        // 프로젝트명 추출 시도 (여러 형식 지원)
-        const projectNameSelectors = [
-            '.estimate-info-value', // 일반 견적서
-            '.estimate-table td', // 테이블 형식
-            '.estimate-phase-title' // 단계별 견적서 (첫 번째 단계명 사용)
-        ];
+        // 상세 견적서: .estimate-title에서 추출
+        const estimateTitle = element.querySelector('.estimate-title');
+        if (estimateTitle) {
+            const titleText = estimateTitle.textContent?.trim();
+            if (titleText && titleText !== 'Estimate' && !titleText.includes('[') && !titleText.includes(']')) {
+                projectName = titleText;
+            }
+        }
         
-        for (const selector of projectNameSelectors) {
-            const elements = element.querySelectorAll(selector);
-            for (const el of elements) {
-                const text = el.textContent?.trim();
-                // "프로젝트명" 라벨 다음에 오는 값 찾기
-                if (text && text.length > 0 && text.length < 100 && !text.includes('원') && !text.includes('일정')) {
-                    // 프로젝트명으로 보이는 값인지 확인
-                    const prevText = el.previousElementSibling?.textContent || '';
-                    const parentText = el.parentElement?.textContent || '';
-                    if (prevText.includes('프로젝트명') || parentText.includes('프로젝트명')) {
-                        projectName = text;
+        // 기본 견적서: .estimate-info-section에서 "프로젝트명" 라벨 다음 값 추출
+        if (!projectName) {
+            const infoRows = element.querySelectorAll('.estimate-info-row');
+            for (const row of infoRows) {
+                const label = row.querySelector('.estimate-info-label');
+                const value = row.querySelector('.estimate-info-value');
+                if (label && value && label.textContent?.trim().includes('프로젝트명')) {
+                    const valueText = value.textContent?.trim();
+                    if (valueText && !valueText.includes('원') && !valueText.includes('일정') && !valueText.includes('[')) {
+                        projectName = valueText;
                         break;
                     }
                 }
             }
-            if (projectName) break;
         }
         
-        // 단계별 견적서인 경우 첫 번째 단계명에서 추출
+        // 단계별 견적서: 첫 번째 단계명에서 추출
         if (!projectName && isPhaseBased) {
             const firstPhaseTitle = element.querySelector('.estimate-phase-title');
             if (firstPhaseTitle) {
@@ -2850,6 +2876,32 @@ function downloadPDF() {
                 }
             }
         }
+        
+        // 테이블에서 프로젝트명 추출 시도
+        if (!projectName) {
+            const tables = element.querySelectorAll('.estimate-table');
+            for (const table of tables) {
+                const rows = table.querySelectorAll('tr');
+                for (const row of rows) {
+                    const cells = row.querySelectorAll('td, th');
+                    for (let i = 0; i < cells.length - 1; i++) {
+                        const cellText = cells[i].textContent?.trim();
+                        if (cellText && (cellText.includes('프로젝트명') || cellText === '프로젝트명')) {
+                            const nextCell = cells[i + 1];
+                            if (nextCell) {
+                                const valueText = nextCell.textContent?.trim();
+                                if (valueText && !valueText.includes('원') && !valueText.includes('일정') && !valueText.includes('[') && valueText.length < 100) {
+                                    projectName = valueText;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    if (projectName) break;
+                }
+                if (projectName) break;
+            }
+        }
     }
     
     // 3. 여전히 없으면 기본값 사용
@@ -2857,8 +2909,8 @@ function downloadPDF() {
         projectName = '프로젝트';
     }
     
-    // 파일명에 사용할 수 없는 문자 제거
-    projectName = projectName.replace(/[<>:"/\\|?*]/g, '_').replace(/\s+/g, '_');
+    // 파일명에 사용할 수 없는 문자 제거 및 공백을 언더스코어로 변경
+    projectName = projectName.replace(/[<>:"/\\|?*]/g, '_').replace(/\s+/g, '_').replace(/\[|\]/g, '');
     
     const filename = `[포너즈] ${projectName}_견적서.pdf`;
     
@@ -3355,7 +3407,6 @@ body {
     font-size: 20px;
     font-weight: bold;
     color: #000;
-    margin: 4px 0 4px 0;
 }
 
 .estimate-package-features {
@@ -3487,7 +3538,7 @@ body {
 }
 
 .company-info-section {
-    margin: 120px 0 20px 0;
+    margin: 100px 0 20px 0;
 }`;
     }
 }

@@ -663,7 +663,7 @@ body.pdf-mode .estimate-client-info + .estimate-divider-solid {
 
 /* 회사 정보 섹션 (사업자번호 포함) 간격 조정 */
 .company-info-section {
-    margin: 120px 0 20px 0;
+    margin: 100px 0 20px 0;
 }
 
 .estimate-info-row {
@@ -772,6 +772,14 @@ body.pdf-mode .estimate-client-info + .estimate-divider-solid {
     margin: 32px 0 16px 0;
 }
 
+/* PDF 다운로드 시 패키지 옵션 섹션이 새로운 페이지에 나오도록 설정 */
+/* 단계별 견적서의 프로젝트별 요약은 주석처리됨 - 새 페이지에서 시작하지 않음 */
+/* .estimate-package-options-section {
+    page-break-before: always;
+    break-before: page;
+    padding-top: 1px;
+} */
+
 /* 개발 일정 섹션 제목 간격 조정 */
 .estimate-timeline-section .estimate-section-title {
     margin: 32px 0 16px 0;
@@ -785,6 +793,20 @@ body.pdf-mode .estimate-client-info + .estimate-divider-solid {
 .estimate-timeline-section,
 .estimate-timeline-section-detailed {
     margin: 0;
+}
+
+/* PDF 다운로드 시 개발 일정 섹션이 새로운 페이지에 나오도록 설정 */
+.estimate-timeline-section {
+    page-break-before: always;
+    break-before: page;
+    padding-top: 1px;
+}
+
+/* PDF 다운로드 시 4. 세부 개발 일정 섹션이 새로운 페이지에 나오도록 설정 */
+.estimate-timeline-section-detailed {
+    page-break-before: always;
+    break-before: page;
+    padding-top: 1px;
 }
 
 .estimate-timeline-section .estimate-timeline-table,
@@ -822,7 +844,6 @@ body.pdf-mode .estimate-client-info + .estimate-divider-solid {
     font-size: 22px;
     font-weight: 700;
     color: #1a202c;
-    margin: 8px 0 4px 0;
 }
 
 .estimate-package-features {
@@ -831,7 +852,7 @@ body.pdf-mode .estimate-client-info + .estimate-divider-solid {
 }
 
 .estimate-package-features li {
-    margin: 6px 0;
+    margin: 5px 0;
     padding-left: 18px;
     position: relative;
     font-size: 14px;
@@ -1002,7 +1023,7 @@ body.pdf-mode .estimate-client-info + .estimate-divider-solid {
 
 /* 단계별 견적 섹션 스타일 */
 .estimate-phase-section {
-    margin: 40px 0;
+    margin: 20px 0;
     padding: 0;
     background-color: transparent;
     border: none;
@@ -1221,8 +1242,8 @@ body.pdf-mode .estimate-client-info + .estimate-divider-solid {
 }
 
 .estimate-package-options-section .estimate-package-section {
-    margin: 16px 0;
-    padding: 20px;
+    margin: 15px 0;
+    padding: 18px 20px;
     background-color: #ffffff;
     border: 1px solid #e2e8f0;
     border-radius: 8px;
