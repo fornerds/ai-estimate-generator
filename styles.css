@@ -769,6 +769,15 @@ body.pdf-mode .estimate-client-info + .estimate-divider-solid {
 
 /* 패키지 옵션 섹션 제목 간격 조정 */
 .estimate-package-options-section .estimate-section-title {
+    page-break-before: always;
+    break-before: page;
+    padding-top: 1px;
+    margin: 32px 0 16px 0;
+}
+
+/* 프로젝트별 요약 섹션 제목 간격 조정 (페이지 브레이크 없음) */
+.estimate-project-summary-section .estimate-section-title {
+    padding-top: 1px;
     margin: 32px 0 16px 0;
 }
 
